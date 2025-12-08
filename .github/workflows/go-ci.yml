@@ -1,0 +1,63 @@
+name: Go CI
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'golang/**'
+      - '.github/workflows/go-ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'golang/**'
+      - '.github/workflows/go-ci.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.23', '1.24']
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go ${{ matrix.go-version }}
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ matrix.go-version }}
+        cache-dependency-path: golang/go.sum
+
+    - name: Install dependencies
+      working-directory: ./golang
+      run: go mod download
+
+    - name: Verify dependencies
+      working-directory: ./golang
+      run: go mod verify
+
+    - name: Build
+      working-directory: ./golang
+      run: go build -v ./...
+
+    - name: Run go vet
+      working-directory: ./golang
+      run: go vet ./...
+
+    - name: Run tests
+      working-directory: ./golang
+      run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./golang/coverage.txt
+        flags: golang
+      continue-on-error: true
+
+    - name: Run staticcheck
+      uses: dominikh/staticcheck-action@v1
+      with:
+        version: "latest"
+        working-directory: golang
+      continue-on-error: true
