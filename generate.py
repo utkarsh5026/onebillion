@@ -18,44 +18,52 @@ class Colors:
     RESET = "\033[0m"
 
 
-def load_stations():
-    stations_file = os.path.join(os.path.dirname(__file__), "stations.json")
-    with open(stations_file, "r", encoding="utf-8") as f:
+def load_and_prepare_stations():
+    file = os.path.join(os.path.dirname(__file__), "stations.json")
+    with open(file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    names = [station["name"] for station in data]
-    temps = np.array([station["mean_temp"] for station in data])
-    return names, temps
+    names = [s["name"].encode("utf-8") + b";" for s in data]
+    st_arr = np.array(names, dtype=object)
+
+    mean_temps = np.array([s["mean_temp"] for s in data])
+
+    min_temp = -2000
+    max_temp = 2000
+
+    lookup = []
+    for temp in range(min_temp, max_temp + 1):
+        s = f"{temp / 10.0:.1f}\n".encode("utf-8")
+        lookup.append(s)
+
+    temp_lookup = np.array(lookup, dtype=object)
+    return st_arr, mean_temps, temp_lookup, -min_temp
 
 
-STATION_NAMES, STATION_TEMPS = load_stations()
+STATION_NAMES, STATION_TEMPS, TEMP_LOOKUP, TEMP_OFFSET = load_and_prepare_stations()
 
 
-def generate_rows_batch(batch_size: int) -> str:
+def generate_rows_batch(batch_size: int) -> bytes:
     """Generate multiple rows at once using numpy for faster random generation."""
     station_indices = np.random.randint(0, len(STATION_NAMES), size=batch_size)
+    means = STATION_TEMPS[station_indices]
+    temps_float = np.random.normal(means, 10.0)
 
-    station_names = [STATION_NAMES[idx] for idx in station_indices]
-    mean_temps = STATION_TEMPS[station_indices]
+    temps_int = np.rint(temps_float * 10).astype(int)
+    lookup_indices = temps_int + TEMP_OFFSET
 
-    temps = np.round(np.random.normal(mean_temps, 10.0), 1)
+    np.clip(lookup_indices, 0, len(TEMP_LOOKUP) - 1, out=lookup_indices)
 
-    parts = []
-    for name, temp in zip(station_names, temps):
-        parts.append(name)
-        parts.append(";")
-        parts.append(str(temp))
-        parts.append("\n")
-
-    return "".join(parts)
+    lines = STATION_NAMES[station_indices] + TEMP_LOOKUP[lookup_indices]
+    return b"".join(lines.tolist())
 
 
 def worker_generate_file(num_rows, temp_filename, progress_counter, progress_lock):
     """Worker function to generate a portion of the data in a separate file."""
-    batch_size = 100_000
+    batch_size = 200_000
     rows_generated = 0
 
-    with open(temp_filename, "w", encoding="utf-8", buffering=8192 * 1024) as f:
+    with open(temp_filename, "wb", buffering=8192 * 1024) as f:
         while rows_generated < num_rows:
             current_batch_size = min(batch_size, num_rows - rows_generated)
             batch = generate_rows_batch(current_batch_size)
