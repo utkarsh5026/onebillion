@@ -28,7 +28,7 @@ def load_stations():
 STATION_NAMES, STATION_TEMPS = load_stations()
 
 
-def generate_rows_batch(batch_size: int) -> list[str]:
+def generate_rows_batch(batch_size: int) -> str:
     """Generate multiple rows at once using numpy for faster random generation."""
     station_indices = np.random.randint(0, len(STATION_NAMES), size=batch_size)
 
@@ -37,9 +37,14 @@ def generate_rows_batch(batch_size: int) -> list[str]:
 
     temps = np.round(np.random.normal(mean_temps, 10.0), 1)
 
-    rows = [f"{name};{temp}\n" for name, temp in zip(station_names, temps)]
+    parts = []
+    for name, temp in zip(station_names, temps):
+        parts.append(name)
+        parts.append(";")
+        parts.append(str(temp))
+        parts.append("\n")
 
-    return rows
+    return "".join(parts)
 
 
 def format_row_count(num_rows):
@@ -112,7 +117,7 @@ def main():
             current_batch_size = min(batch_size, num_rows - rows_generated)
             batch = generate_rows_batch(current_batch_size)
 
-            f.writelines(batch)
+            f.write(batch)
             rows_generated += current_batch_size
 
             if rows_generated % 500_000 == 0 or rows_generated == num_rows:
