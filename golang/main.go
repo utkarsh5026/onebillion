@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"text/tabwriter"
 	"time"
 )
 
@@ -47,7 +48,6 @@ func main() {
 
 	results := make([]BenchmarkResult, 0, len(strategies))
 
-	// Run each strategy and collect results
 	for _, s := range strategies {
 		fmt.Printf("%s⏱️  Running: %s%s\n", ColorYellow, s.name, ColorReset)
 		result := benchmarkStrategy(s.name, s.strategy, dataFile)
@@ -113,12 +113,7 @@ func printSummary(results []BenchmarkResult) {
 		return
 	}
 
-	// Print header
-	fmt.Printf("%-25s %-15s %-15s %-10s %s\n",
-		"Strategy", "Time", "Memory (MB)", "Results", "Status")
-	fmt.Println("─────────────────────────────────────────────────────────────────────────────")
-
-	// Find fastest for comparison
+	// Find the fastest strategy
 	var fastest *BenchmarkResult
 	for i := range results {
 		if results[i].Success && (fastest == nil || results[i].ExecutionTime < fastest.ExecutionTime) {
@@ -126,41 +121,50 @@ func printSummary(results []BenchmarkResult) {
 		}
 	}
 
-	// Print each result
+	// Create a tabwriter for nicely formatted table output
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
+
+	// Print header
+	fmt.Fprintf(w, "%s%sSTRATEGY\tTIME\tMEMORY (MB)\tRESULTS\tSTATUS%s\n",
+		ColorBold, ColorCyan, ColorReset)
+	fmt.Fprintf(w, "───────────────────────\t────────────\t───────────\t────────\t──────────────\n")
+
+	// Add rows to the table
 	for _, result := range results {
 		memoryMB := float64(result.MemoryUsed) / 1024 / 1024
-
 		timeStr := formatDuration(result.ExecutionTime)
-		memStr := fmt.Sprintf("%.2f MB", memoryMB)
 		statusStr := ""
-		color := ColorWhite
+		rowColor := ""
 
 		if result.Success {
 			if fastest != nil && result.StrategyName == fastest.StrategyName {
 				statusStr = "✓ FASTEST"
-				color = ColorGreen
+				rowColor = ColorGreen
 			} else {
 				statusStr = "✓"
-				color = ColorWhite
+				rowColor = ""
 			}
 		} else {
 			statusStr = "✗ FAILED"
-			color = ColorRed
+			rowColor = ColorRed
 		}
 
-		fmt.Printf("%s%-25s %-15s %-15s %-10d %s%s\n",
-			color,
+		fmt.Fprintf(w, "%s%s\t%s\t%.2f\t%d\t%s%s\n",
+			rowColor,
 			result.StrategyName,
 			timeStr,
-			memStr,
+			memoryMB,
 			result.ResultCount,
 			statusStr,
 			ColorReset)
 
+		// Add error row if needed
 		if result.Error != nil {
-			fmt.Printf("%s   Error: %v%s\n", ColorRed, result.Error, ColorReset)
+			fmt.Fprintf(w, "%s  Error: %v%s\t\t\t\t\n", ColorRed, result.Error, ColorReset)
 		}
 	}
+
+	w.Flush()
 
 	// Print comparison if multiple successful results
 	successfulResults := 0
