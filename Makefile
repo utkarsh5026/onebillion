@@ -1,4 +1,4 @@
-.PHONY: help generate generate-small generate-large generate-billion clean clean-all
+.PHONY: help generate generate-small generate-large generate-billion generate-all clean clean-all
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -21,6 +21,7 @@ help:
 	@echo "  $(GREEN)make generate-small$(RESET)   - Generate 10M rows $(YELLOW)(~140MB, for testing)$(RESET)"
 	@echo "  $(GREEN)make generate-large$(RESET)   - Generate 100M rows $(YELLOW)(~1.4GB, standard 1BRC)$(RESET)"
 	@echo "  $(GREEN)make generate-billion$(RESET) - Generate 1B rows $(YELLOW)(~14GB, full challenge!)$(RESET)"
+	@echo "  $(MAGENTA)make generate-all$(RESET)     - Generate all datasets $(YELLOW)(10M + 100M + 1B, ~15.5GB total)$(RESET)"
 	@echo "  $(RED)make clean$(RESET)            - Remove all generated data files"
 	@echo "  $(RED)make clean-all$(RESET)        - Remove data directory and all contents"
 	@echo ""
@@ -45,6 +46,10 @@ generate-billion:
 	@echo "$(MAGENTA)▶ Generating 1 BILLION rows$(RESET) → $(CYAN)measurements-1b.txt$(RESET) $(YELLOW)(this will take a while!)$(RESET)"
 	@python generate.py b
 	@echo "$(GREEN)✓ Generation complete!$(RESET)"
+
+# Generate all datasets (small + large + billion)
+generate-all: generate-small generate-large generate-billion
+	@echo "$(MAGENTA)✓ All datasets generated successfully!$(RESET)"
 
 # Clean all generated data files
 clean:
