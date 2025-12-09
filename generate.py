@@ -41,20 +41,22 @@ def load_and_prepare_stations():
 
 
 STATION_NAMES, STATION_TEMPS, TEMP_LOOKUP, TEMP_OFFSET = load_and_prepare_stations()
+POOL_SIZE = 5_000_000
+
+GLOABAL_STATION_INDICES = np.random.randint(0, len(STATION_NAMES), size=POOL_SIZE)
+GLOBAL_TEMP_INDICES = np.random.randint(0, len(TEMP_LOOKUP), size=POOL_SIZE)
 
 
 def generate_rows_batch(batch_size: int) -> bytes:
     """Generate multiple rows at once using numpy for faster random generation."""
-    station_indices = np.random.randint(0, len(STATION_NAMES), size=batch_size)
-    means = STATION_TEMPS[station_indices]
-    temps_float = np.random.normal(means, 10.0)
+    max_start_index = POOL_SIZE - batch_size
+    start = np.random.randint(0, max_start_index + 1)
+    end = start + batch_size
 
-    temps_int = np.rint(temps_float * 10).astype(int)
-    lookup_indices = temps_int + TEMP_OFFSET
-
-    np.clip(lookup_indices, 0, len(TEMP_LOOKUP) - 1, out=lookup_indices)
-
-    lines = STATION_NAMES[station_indices] + TEMP_LOOKUP[lookup_indices]
+    lines = (
+        STATION_NAMES[GLOABAL_STATION_INDICES[start:end]]
+        + TEMP_LOOKUP[GLOBAL_TEMP_INDICES[start:end]]
+    )
     return b"".join(lines.tolist())
 
 
