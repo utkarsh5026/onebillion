@@ -1,37 +1,52 @@
 package strategies
 
 import (
+	"fmt"
+	"math/rand"
 	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 )
 
-// getTestDataFile locates the test data file
-func getTestDataFile(b *testing.B) string {
-	// Try different possible locations
-	possiblePaths := []string{
-		"../../data/measurements.txt",
-		"../../data/measurements-100.txt",
-		"../../data/measurements-1000.txt",
-		"../data/measurements.txt",
-		"data/measurements.txt",
-	}
+// Common city names for test data generation
+var testCities = []string{
+	"Hamburg", "Berlin", "Tokyo", "Sydney", "New York", "London", "Paris", "Moscow",
+	"Beijing", "Mumbai", "Cairo", "Rio", "Toronto", "Dubai", "Singapore", "Stockholm",
+	"Oslo", "Helsinki", "Warsaw", "Prague", "Vienna", "Rome", "Madrid", "Lisbon",
+	"Athens", "Istanbul", "Bangkok", "Seoul", "Manila", "Jakarta", "Delhi", "Shanghai",
+}
 
-	for _, path := range possiblePaths {
-		if _, err := os.Stat(path); err == nil {
-			return path
+// generateTempTestData creates a temporary test file with specified number of measurements
+func generateTempTestData(b *testing.B, numRows int) string {
+	tmpFile, err := os.CreateTemp("", "measurements-*.txt")
+	if err != nil {
+		b.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer tmpFile.Close()
+
+	// Ensure cleanup after benchmark
+	b.Cleanup(func() {
+		os.Remove(tmpFile.Name())
+	})
+
+	// Generate random measurements
+	for i := 0; i < numRows; i++ {
+		city := testCities[rand.Intn(len(testCities))]
+		// Temperature range: -50.0 to 50.0
+		temp := (rand.Float64() * 100.0) - 50.0
+		line := fmt.Sprintf("%s;%.1f\n", city, temp)
+		if _, err := tmpFile.WriteString(line); err != nil {
+			b.Fatalf("Failed to write to temp file: %v", err)
 		}
 	}
 
-	pattern := "../../data/measurements*.txt"
-	matches, err := filepath.Glob(pattern)
-	if err == nil && len(matches) > 0 {
-		return matches[0]
-	}
+	return tmpFile.Name()
+}
 
-	b.Fatal("No test data file found. Please ensure a measurements*.txt file exists in the data directory")
-	return ""
+// getTestDataFile generates a temp test file for benchmarking
+// Default: 100,000 rows (~2MB) - fast enough for quick benchmarks
+func getTestDataFile(b *testing.B) string {
+	return generateTempTestData(b, 100_000)
 }
 
 // BenchmarkBasicStrategy benchmarks the basic string-based strategy
@@ -207,4 +222,61 @@ func formatCPUCount(n int) string {
 		return "1CPU"
 	}
 	return string(rune('0'+n)) + "CPUs"
+}
+
+// BenchmarkMCMPStrategy benchmarks the multi-core multi-processing strategy
+func BenchmarkMCMPStrategy(b *testing.B) {
+	dataFile := getTestDataFile(b)
+	strategy := &MCMPStrategy{}
+
+	for b.Loop() {
+		_, err := strategy.Calculate(dataFile)
+		if err != nil {
+			b.Fatalf("MCMPStrategy failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkMCMPStrategyMemory benchmarks memory allocation for MCMP strategy
+func BenchmarkMCMPStrategyMemory(b *testing.B) {
+	dataFile := getTestDataFile(b)
+	strategy := &MCMPStrategy{}
+
+	b.ReportAllocs()
+
+	for b.Loop() {
+		_, err := strategy.Calculate(dataFile)
+		if err != nil {
+			b.Fatalf("MCMPStrategy failed: %v", err)
+		}
+	}
+}
+
+// BenchmarkMCMPStrategyWithCPUs benchmarks the MCMP strategy with varying CPU counts
+func BenchmarkMCMPStrategyWithCPUs(b *testing.B) {
+	dataFile := getTestDataFile(b)
+
+	cpuCounts := []int{1, 2, 4, 8, 16}
+	originalCPU := runtime.GOMAXPROCS(0)
+
+	for _, numCPU := range cpuCounts {
+		if numCPU > runtime.NumCPU() {
+			continue
+		}
+
+		b.Run(formatCPUCount(numCPU), func(b *testing.B) {
+			runtime.GOMAXPROCS(numCPU)
+			strategy := &MCMPStrategy{}
+
+			b.ResetTimer()
+			for b.Loop() {
+				_, err := strategy.Calculate(dataFile)
+				if err != nil {
+					b.Fatalf("MCMPStrategy failed: %v", err)
+				}
+			}
+		})
+	}
+
+	runtime.GOMAXPROCS(originalCPU)
 }
