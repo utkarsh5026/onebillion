@@ -1,4 +1,4 @@
-.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion force-generate-small force-generate-medium force-generate-large force-generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles fmt vet lint modernize tidy check
+.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles fmt vet lint modernize tidy check
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -44,11 +44,6 @@ help:
 	@echo "  $(GREEN)make bench-large$(RESET)      - Large benchmark $(YELLOW)(500M rows, ~20min)$(RESET)"
 	@echo "  $(GREEN)make bench-billion$(RESET)    - Full 1B benchmark $(YELLOW)(1B rows, ~45min!)$(RESET)"
 	@echo ""
-	@echo "$(BOLD)Data Generation (skips if exists):$(RESET)"
-	@echo "  $(GREEN)make generate-small$(RESET)   - Generate 10M rows $(YELLOW)(~140MB)$(RESET)"
-	@echo "  $(GREEN)make generate-medium$(RESET)  - Generate 100M rows $(YELLOW)(~1.4GB)$(RESET)"
-	@echo "  $(GREEN)make generate-large$(RESET)   - Generate 500M rows $(YELLOW)(~7GB)$(RESET)"
-	@echo "  $(GREEN)make generate-billion$(RESET) - Generate 1B rows $(YELLOW)(~14GB)$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Performance Profiling:$(RESET)"
 	@echo "  $(MAGENTA)make profile$(RESET)          - Profile with CPU + memory profiling"
@@ -134,6 +129,8 @@ benchmark: build
 	@./$(BINARY).exe
 	@echo "$(GREEN)✓ Quick benchmark complete!$(RESET)"
 
+
+
 # Small benchmark (10M rows)
 bench-small: build generate-small
 	@echo ""
@@ -141,7 +138,7 @@ bench-small: build generate-small
 	@echo "$(CYAN)$(BOLD)  Running Small Benchmark (10M rows)$(RESET)"
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@./$(BINARY).exe
+	@./$(BINARY).exe ../data/measurements-10m.txt
 
 # Medium benchmark (100M rows)
 bench-medium: build generate-medium
@@ -150,7 +147,7 @@ bench-medium: build generate-medium
 	@echo "$(CYAN)$(BOLD)  Running Medium Benchmark (100M rows)$(RESET)"
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@./$(BINARY).exe
+	@./$(BINARY).exe ../data/measurements-100m.txt
 
 # Large benchmark (500M rows)
 bench-large: build generate-large
@@ -159,7 +156,7 @@ bench-large: build generate-large
 	@echo "$(MAGENTA)$(BOLD)  Running Large Benchmark (500M rows)$(RESET)"
 	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@./$(BINARY).exe
+	@./$(BINARY).exe ../data/measurements-500m.txt
 
 # Billion row benchmark (full challenge!)
 bench-billion: build generate-billion
@@ -168,56 +165,9 @@ bench-billion: build generate-billion
 	@echo "$(MAGENTA)$(BOLD)  Running BILLION ROW CHALLENGE (1B rows)$(RESET)"
 	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@./$(BINARY).exe
-
-# Generate test data of different sizes
-generate-small:
-	@mkdir -p ../data
-	@if [ -f ../data/measurements-10m.txt ]; then \
-		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-10m.txt"; \
-		ls -lh ../data/measurements-10m.txt | awk '{print "  Size: " $$5}'; \
-	else \
-		echo "$(BLUE)▶ Generating 10M rows...$(RESET)"; \
-		python $(GENERATOR) 10000000; \
-		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
-	fi
-
-generate-medium:
-	@mkdir -p ../data
-	@if [ -f ../data/measurements-100m.txt ]; then \
-		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-100m.txt"; \
-		ls -lh ../data/measurements-100m.txt | awk '{print "  Size: " $$5}'; \
-	else \
-		echo "$(BLUE)▶ Generating 100M rows...$(RESET)"; \
-		python $(GENERATOR) 100000000; \
-		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
-	fi
-
-generate-large:
-	@mkdir -p ../data
-	@if [ -f ../data/measurements-500m.txt ]; then \
-		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-500m.txt"; \
-		ls -lh ../data/measurements-500m.txt | awk '{print "  Size: " $$5}'; \
-	else \
-		echo "$(BLUE)▶ Generating 500M rows...$(RESET)"; \
-		python $(GENERATOR) 500000000; \
-		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
-	fi
-
-generate-billion:
-	@mkdir -p ../data
-	@if [ -f ../data/measurements-1b.txt ]; then \
-		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-1b.txt"; \
-		ls -lh ../data/measurements-1b.txt | awk '{print "  Size: " $$5}'; \
-	else \
-		echo "$(MAGENTA)▶ Generating 1 BILLION rows $(YELLOW)(this will take a while!)$(RESET)"; \
-		python $(GENERATOR) b; \
-		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
-	fi
+	@./$(BINARY).exe ../data/measurements-1b.txt
 
 
-
-# Profiling targets
 profile: build
 	@echo ""
 	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
