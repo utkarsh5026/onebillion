@@ -1,4 +1,4 @@
-.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion clean clean-all
+.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion force-generate-small force-generate-medium force-generate-large force-generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -13,6 +13,10 @@ RESET := \033[0m
 # Binary name
 BINARY := benchmark
 GENERATOR := ../generate.py
+
+# Profiling files
+CPU_PROFILE := cpu.prof
+MEM_PROFILE := mem.prof
 
 # Default target
 help:
@@ -32,14 +36,23 @@ help:
 	@echo "  $(GREEN)make bench-large$(RESET)      - Large benchmark $(YELLOW)(500M rows, ~20min)$(RESET)"
 	@echo "  $(GREEN)make bench-billion$(RESET)    - Full 1B benchmark $(YELLOW)(1B rows, ~45min!)$(RESET)"
 	@echo ""
-	@echo "$(BOLD)Data Generation:$(RESET)"
+	@echo "$(BOLD)Data Generation (skips if exists):$(RESET)"
 	@echo "  $(GREEN)make generate-small$(RESET)   - Generate 10M rows $(YELLOW)(~140MB)$(RESET)"
 	@echo "  $(GREEN)make generate-medium$(RESET)  - Generate 100M rows $(YELLOW)(~1.4GB)$(RESET)"
 	@echo "  $(GREEN)make generate-large$(RESET)   - Generate 500M rows $(YELLOW)(~7GB)$(RESET)"
 	@echo "  $(GREEN)make generate-billion$(RESET) - Generate 1B rows $(YELLOW)(~14GB)$(RESET)"
 	@echo ""
+	@echo "$(BOLD)Performance Profiling:$(RESET)"
+	@echo "  $(MAGENTA)make profile$(RESET)          - Profile with CPU + memory profiling"
+	@echo "  $(MAGENTA)make profile-cpu$(RESET)      - CPU profiling only"
+	@echo "  $(MAGENTA)make profile-mem$(RESET)      - Memory profiling only"
+	@echo "  $(MAGENTA)make pprof-cpu$(RESET)        - Analyze CPU profile (interactive)"
+	@echo "  $(MAGENTA)make pprof-mem$(RESET)        - Analyze memory profile (interactive)"
+	@echo "  $(MAGENTA)make pprof-web$(RESET)        - Open profile in web browser"
+	@echo ""
 	@echo "$(BOLD)Cleanup:$(RESET)"
 	@echo "  $(RED)make clean$(RESET)            - Remove binary and generated data"
+	@echo "  $(RED)make clean-profiles$(RESET)   - Remove profiling data"
 	@echo "  $(RED)make clean-all$(RESET)        - Remove everything (binary, data, cache)"
 	@echo ""
 
@@ -63,7 +76,7 @@ test:
 # Quick benchmark with 1K rows (for testing)
 benchmark: build
 	@echo "$(YELLOW)▶ Quick benchmark with 1K rows...$(RESET)"
-	@mkdir -p data
+	@mkdir -p ../data
 	@python $(GENERATOR) 1000
 	@echo ""
 	@./$(BINARY).exe
@@ -107,40 +120,134 @@ bench-billion: build generate-billion
 
 # Generate test data of different sizes
 generate-small:
-	@echo "$(BLUE)▶ Generating 10M rows...$(RESET)"
-	@mkdir -p data
-	@python $(GENERATOR) 10000000
-	@echo "$(GREEN)✓ Data generation complete!$(RESET)"
+	@mkdir -p ../data
+	@if [ -f ../data/measurements-10m.txt ]; then \
+		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-10m.txt"; \
+		ls -lh ../data/measurements-10m.txt | awk '{print "  Size: " $$5}'; \
+	else \
+		echo "$(BLUE)▶ Generating 10M rows...$(RESET)"; \
+		python $(GENERATOR) 10000000; \
+		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
+	fi
 
 generate-medium:
-	@echo "$(BLUE)▶ Generating 100M rows...$(RESET)"
-	@mkdir -p data
-	@python $(GENERATOR) 100000000
-	@echo "$(GREEN)✓ Data generation complete!$(RESET)"
+	@mkdir -p ../data
+	@if [ -f ../data/measurements-100m.txt ]; then \
+		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-100m.txt"; \
+		ls -lh ../data/measurements-100m.txt | awk '{print "  Size: " $$5}'; \
+	else \
+		echo "$(BLUE)▶ Generating 100M rows...$(RESET)"; \
+		python $(GENERATOR) 100000000; \
+		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
+	fi
 
 generate-large:
-	@echo "$(BLUE)▶ Generating 500M rows...$(RESET)"
-	@mkdir -p data
-	@python $(GENERATOR) 500000000
-	@echo "$(GREEN)✓ Data generation complete!$(RESET)"
+	@mkdir -p ../data
+	@if [ -f ../data/measurements-500m.txt ]; then \
+		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-500m.txt"; \
+		ls -lh ../data/measurements-500m.txt | awk '{print "  Size: " $$5}'; \
+	else \
+		echo "$(BLUE)▶ Generating 500M rows...$(RESET)"; \
+		python $(GENERATOR) 500000000; \
+		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
+	fi
 
 generate-billion:
-	@echo "$(MAGENTA)▶ Generating 1 BILLION rows $(YELLOW)(this will take a while!)$(RESET)"
-	@mkdir -p data
-	@python $(GENERATOR) b
-	@echo "$(GREEN)✓ Data generation complete!$(RESET)"
+	@mkdir -p ../data
+	@if [ -f ../data/measurements-1b.txt ]; then \
+		echo "$(GREEN)✓ Data file already exists:$(RESET) ../data/measurements-1b.txt"; \
+		ls -lh ../data/measurements-1b.txt | awk '{print "  Size: " $$5}'; \
+	else \
+		echo "$(MAGENTA)▶ Generating 1 BILLION rows $(YELLOW)(this will take a while!)$(RESET)"; \
+		python $(GENERATOR) b; \
+		echo "$(GREEN)✓ Data generation complete!$(RESET)"; \
+	fi
+
+
+
+# Profiling targets
+profile: build
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)  Running with CPU + Memory Profiling$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@./$(BINARY).exe -cpuprofile=$(CPU_PROFILE) -memprofile=$(MEM_PROFILE)
+	@echo ""
+	@echo "$(GREEN)✓ Profiling complete!$(RESET)"
+	@echo "$(CYAN)  CPU profile:$(RESET) $(CPU_PROFILE)"
+	@echo "$(CYAN)  Memory profile:$(RESET) $(MEM_PROFILE)"
+	@echo ""
+	@echo "$(YELLOW)Analyze with:$(RESET)"
+	@echo "  $(BLUE)make pprof-cpu$(RESET)  - Analyze CPU usage"
+	@echo "  $(BLUE)make pprof-mem$(RESET)  - Analyze memory allocations"
+	@echo "  $(BLUE)make pprof-web$(RESET)  - Open in web browser"
+	@echo ""
+
+profile-cpu: build
+	@echo "$(MAGENTA)▶ Running CPU profiling...$(RESET)"
+	@./$(BINARY).exe -cpuprofile=$(CPU_PROFILE)
+	@echo "$(GREEN)✓ CPU profile saved:$(RESET) $(CPU_PROFILE)"
+	@echo "$(YELLOW)Analyze with:$(RESET) make pprof-cpu"
+
+profile-mem: build
+	@echo "$(MAGENTA)▶ Running memory profiling...$(RESET)"
+	@./$(BINARY).exe -memprofile=$(MEM_PROFILE)
+	@echo "$(GREEN)✓ Memory profile saved:$(RESET) $(MEM_PROFILE)"
+	@echo "$(YELLOW)Analyze with:$(RESET) make pprof-mem
+
+# Profile analysis targets
+pprof-cpu:
+	@if [ ! -f $(CPU_PROFILE) ]; then \
+		echo "$(RED)Error: $(CPU_PROFILE) not found. Run 'make profile-cpu' first.$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Opening CPU profile in interactive mode...$(RESET)"
+	@echo "$(YELLOW)Tip: Try 'top', 'list', 'web', or 'quit'$(RESET)"
+	@go tool pprof $(BINARY).exe $(CPU_PROFILE)
+
+pprof-mem:
+	@if [ ! -f $(MEM_PROFILE) ]; then \
+		echo "$(RED)Error: $(MEM_PROFILE) not found. Run 'make profile-mem' first.$(RESET)"; \
+		exit 1; \
+	fi
+	@echo "$(CYAN)Opening memory profile in interactive mode...$(RESET)"
+	@echo "$(YELLOW)Tip: Try 'top', 'list', 'web', or 'quit'$(RESET)"
+	@go tool pprof $(BINARY).exe $(MEM_PROFILE)
+
+pprof-web:
+	@if [ ! -f $(CPU_PROFILE) ] && [ ! -f $(MEM_PROFILE) ]; then \
+		echo "$(RED)Error: No profile files found. Run 'make profile' first.$(RESET)"; \
+		exit 1; \
+	fi
+	@if [ -f $(CPU_PROFILE) ]; then \
+		echo "$(CYAN)Opening CPU profile in web browser...$(RESET)"; \
+		go tool pprof -http=:8080 $(BINARY).exe $(CPU_PROFILE); \
+	elif [ -f $(MEM_PROFILE) ]; then \
+		echo "$(CYAN)Opening memory profile in web browser...$(RESET)"; \
+		go tool pprof -http=:8080 $(BINARY).exe $(MEM_PROFILE); \
+	fi
 
 # Clean generated files and binary
 clean:
 	@echo "$(RED)▶ Cleaning up...$(RESET)"
 	@rm -f $(BINARY).exe
-	@rm -f data/measurements-*.txt
+	@rm -f ../data/measurements-*.txt
 	@echo "$(GREEN)✓ Clean complete!$(RESET)"
+
+# Clean profiling files
+clean-profiles:
+	@echo "$(RED)▶ Removing profiling data...$(RESET)"
+	@rm -f $(CPU_PROFILE) $(MEM_PROFILE)
+	@rm -f *.prof
+	@echo "$(GREEN)✓ Profiling data removed!$(RESET)"
 
 # Clean everything including data directory
 clean-all:
 	@echo "$(RED)▶ Removing all generated files and directories...$(RESET)"
 	@rm -f $(BINARY).exe
-	@rm -rf data
+	@rm -f $(CPU_PROFILE) $(MEM_PROFILE)
+	@rm -f *.prof
+	@rm -rf ../data
 	@go clean -cache -testcache -modcache
 	@echo "$(GREEN)✓ Deep clean complete!$(RESET)"

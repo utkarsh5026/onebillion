@@ -1,11 +1,13 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"onebillion/strategies"
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/pprof"
 	"sort"
 	"text/tabwriter"
 	"time"
@@ -34,7 +36,48 @@ const (
 	ColorBold   = "\033[1m"
 )
 
+var (
+	cpuprofile = flag.String("cpuprofile", "", "write cpu profile to file")
+	memprofile = flag.String("memprofile", "", "write memory profile to file")
+)
+
 func main() {
+	flag.Parse()
+
+	if *cpuprofile != "" {
+		f, err := os.Create(*cpuprofile)
+		if err != nil {
+			fmt.Printf("%sError creating CPU profile: %v%s\n", ColorRed, err, ColorReset)
+			os.Exit(1)
+		}
+		defer f.Close()
+
+		if err := pprof.StartCPUProfile(f); err != nil {
+			fmt.Printf("%sError starting CPU profile: %v%s\n", ColorRed, err, ColorReset)
+			os.Exit(1)
+		}
+		defer pprof.StopCPUProfile()
+		fmt.Printf("%s📊 CPU profiling enabled → %s%s\n", ColorGreen, *cpuprofile, ColorReset)
+	}
+
+	if *memprofile != "" {
+		defer func() {
+			f, err := os.Create(*memprofile)
+			if err != nil {
+				fmt.Printf("%sError creating memory profile: %v%s\n", ColorRed, err, ColorReset)
+				return
+			}
+			defer f.Close()
+
+			runtime.GC() // get up-to-date statistics
+			if err := pprof.WriteHeapProfile(f); err != nil {
+				fmt.Printf("%sError writing memory profile: %v%s\n", ColorRed, err, ColorReset)
+			} else {
+				fmt.Printf("%s📊 Memory profile saved → %s%s\n", ColorGreen, *memprofile, ColorReset)
+			}
+		}()
+	}
+
 	fmt.Printf("%s%s=== One Billion Row Challenge - Benchmark ===%s\n\n", ColorBold, ColorCyan, ColorReset)
 
 	dataFile := getDataFile()
@@ -44,6 +87,7 @@ func main() {
 		strategy strategies.Strategy
 	}{
 		{"Basic Strategy", &strategies.BasicStrategy{}},
+		{"Byte Strategy", &strategies.ByteReadingStrategy{}},
 	}
 
 	results := make([]BenchmarkResult, 0, len(strategies))
@@ -203,8 +247,9 @@ func formatDuration(d time.Duration) string {
 // getDataFile determines which data file to use
 // Priority: 1) Command line argument, 2) Most recent measurements-*.txt, 3) Default measurements.txt
 func getDataFile() string {
-	if len(os.Args) > 1 {
-		dataFile := os.Args[1]
+	args := flag.Args()
+	if len(args) > 0 {
+		dataFile := args[0]
 		if _, err := os.Stat(dataFile); err == nil {
 			fmt.Printf("%sUsing data file:%s %s\n\n", ColorBlue, ColorReset, dataFile)
 			return dataFile
@@ -212,7 +257,7 @@ func getDataFile() string {
 		fmt.Printf("%sWarning: File '%s' not found, searching for alternatives...%s\n", ColorYellow, dataFile, ColorReset)
 	}
 
-	dataDir := "data"
+	dataDir := "../data"
 	pattern := filepath.Join(dataDir, "measurements-*.txt")
 	matches, err := filepath.Glob(pattern)
 
