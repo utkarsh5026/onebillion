@@ -1,5 +1,7 @@
 package strategies
 
+import "os"
+
 type StationMap = map[uint32]StationResult
 
 type Station struct {
@@ -68,4 +70,12 @@ func mergeMaps(maps []StationMap) StationMap {
 		}
 	}
 	return merged
+}
+
+func getFileSize(f *os.File) (int64, error) {
+	info, err := f.Stat()
+	if err != nil {
+		return 0, err
+	}
+	return info.Size(), nil
 }
