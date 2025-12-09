@@ -24,8 +24,8 @@ func parseLineByte(line []byte) (name []byte, value int64, err error) {
 		return nil, -1, fmt.Errorf("invalid line format")
 	}
 
-	name = bytes.TrimSpace(line[:colonIndex])
-	valueBytes := bytes.TrimSpace(line[colonIndex+1:])
+	name = line[:colonIndex]
+	valueBytes := line[colonIndex+1:]
 
 	value, err = byteToInt(valueBytes)
 	return name, value, err

@@ -85,7 +85,6 @@ func (m *MCMPStrategy) processChunk(start, end int64, filePath string, bufferSiz
 	}
 
 	count := 0
-	results := make([]Station, 0, 1024)
 	for {
 		if currentPos >= end {
 			break
@@ -100,14 +99,21 @@ func (m *MCMPStrategy) processChunk(start, end int64, filePath string, bufferSiz
 		if err != nil {
 			continue
 		}
-		results = append(results, Station{Station: name, Value: value})
-		count++
-
-		if count >= 1024 {
-			processBatch(results, fileMap)
-			results = results[:0]
-			count = 0
+		hash := hashFnv(name)
+		st, exists := fileMap[hash]
+		if !exists {
+			st = newSt(string(name))
 		}
+
+		st.Sum += int64(value)
+		if value > st.Maximum {
+			st.Maximum = value
+		}
+		if value < st.Minimum {
+			st.Minimum = value
+		}
+		fileMap[hash] = st
+		count++
 
 		if err == io.EOF {
 			break
