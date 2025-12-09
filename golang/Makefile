@@ -1,4 +1,4 @@
-.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion force-generate-small force-generate-medium force-generate-large force-generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles fmt vet lint tidy check
+.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion force-generate-small force-generate-medium force-generate-large force-generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles fmt vet lint modernize tidy check
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -33,6 +33,7 @@ help:
 	@echo "  $(CYAN)make fmt$(RESET)              - Format code using go fmt"
 	@echo "  $(CYAN)make vet$(RESET)              - Run go vet for static analysis"
 	@echo "  $(CYAN)make lint$(RESET)             - Run golangci-lint"
+	@echo "  $(CYAN)make modernize$(RESET)        - Modernize Go code with latest idioms"
 	@echo "  $(CYAN)make tidy$(RESET)             - Clean up go.mod and go.sum"
 	@echo "  $(CYAN)make check$(RESET)            - Run all checks (fmt, vet, lint, test)"
 	@echo ""
@@ -105,6 +106,12 @@ lint:
 		go vet ./...; \
 		echo "$(GREEN)✓ Basic vet check passed!$(RESET)"; \
 	fi
+
+# Modernize Go code with latest idioms
+modernize:
+	@echo "$(BLUE)▶ Modernizing Go code...$(RESET)"
+	@go run golang.org/x/tools/gopls/internal/analysis/modernize/cmd/modernize@latest -fix -test ./...
+	@echo "$(GREEN)✓ Code modernization complete!$(RESET)"
 
 # Tidy up dependencies
 tidy:
