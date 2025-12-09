@@ -86,6 +86,7 @@ func main() {
 		name     string
 		strategy strategies.Strategy
 	}{
+		{"Batch Strategy", &strategies.BatchStrategy{}},
 		{"Basic Strategy", &strategies.BasicStrategy{}},
 		{"Byte Strategy", &strategies.ByteReadingStrategy{}},
 	}

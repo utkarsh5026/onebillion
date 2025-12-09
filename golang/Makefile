@@ -1,4 +1,4 @@
-.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion force-generate-small force-generate-medium force-generate-large force-generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles
+.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion generate-small generate-medium generate-large generate-billion force-generate-small force-generate-medium force-generate-large force-generate-billion profile profile-cpu profile-mem pprof-cpu pprof-mem pprof-web clean clean-all clean-profiles fmt vet lint tidy check
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -28,6 +28,13 @@ help:
 	@echo "  $(GREEN)make build$(RESET)            - Compile the benchmark binary"
 	@echo "  $(GREEN)make run$(RESET)              - Run benchmark with default data"
 	@echo "  $(GREEN)make test$(RESET)             - Run Go tests"
+	@echo ""
+	@echo "$(BOLD)Code Quality:$(RESET)"
+	@echo "  $(CYAN)make fmt$(RESET)              - Format code using go fmt"
+	@echo "  $(CYAN)make vet$(RESET)              - Run go vet for static analysis"
+	@echo "  $(CYAN)make lint$(RESET)             - Run golangci-lint"
+	@echo "  $(CYAN)make tidy$(RESET)             - Clean up go.mod and go.sum"
+	@echo "  $(CYAN)make check$(RESET)            - Run all checks (fmt, vet, lint, test)"
 	@echo ""
 	@echo "$(BOLD)Benchmarks (auto-generate + run):$(RESET)"
 	@echo "  $(GREEN)make benchmark$(RESET)        - Quick benchmark $(YELLOW)(1K rows, instant)$(RESET)"
@@ -72,6 +79,44 @@ test:
 	@echo "$(BLUE)▶ Running Go tests...$(RESET)"
 	@go test -v ./...
 	@echo "$(GREEN)✓ Tests complete!$(RESET)"
+
+# Format code
+fmt:
+	@echo "$(BLUE)▶ Formatting code...$(RESET)"
+	@go fmt ./...
+	@echo "$(GREEN)✓ Code formatted!$(RESET)"
+
+# Run go vet
+vet:
+	@echo "$(BLUE)▶ Running go vet...$(RESET)"
+	@go vet ./...
+	@echo "$(GREEN)✓ Vet check passed!$(RESET)"
+
+# Run golangci-lint
+lint:
+	@echo "$(BLUE)▶ Running golangci-lint...$(RESET)"
+	@if command -v golangci-lint > /dev/null 2>&1; then \
+		golangci-lint run ./...; \
+		echo "$(GREEN)✓ Lint check passed!$(RESET)"; \
+	else \
+		echo "$(YELLOW)⚠ golangci-lint not installed. Install with:$(RESET)"; \
+		echo "  $(CYAN)go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest$(RESET)"; \
+		echo "$(YELLOW)⚠ Falling back to basic checks...$(RESET)"; \
+		go vet ./...; \
+		echo "$(GREEN)✓ Basic vet check passed!$(RESET)"; \
+	fi
+
+# Tidy up dependencies
+tidy:
+	@echo "$(BLUE)▶ Tidying dependencies...$(RESET)"
+	@go mod tidy
+	@echo "$(GREEN)✓ Dependencies tidied!$(RESET)"
+
+# Run all checks
+check: fmt vet lint test
+	@echo ""
+	@echo "$(GREEN)$(BOLD)✓ All checks passed!$(RESET)"
+	@echo ""
 
 # Quick benchmark with 1K rows (for testing)
 benchmark: build

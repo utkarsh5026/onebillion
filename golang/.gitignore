@@ -36,3 +36,5 @@ Thumbs.db
 # Benchmark results
 benchmark.exe
 *.bench
+
+*.prof
