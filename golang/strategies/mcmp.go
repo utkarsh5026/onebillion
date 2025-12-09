@@ -55,20 +55,9 @@ func (m *MCMPStrategy) processChunk(start, end int64, filePath string, bufferSiz
 	}
 	defer f.Close()
 
-	shouldSkipFirstLine := false
-	if start > 0 {
-		_, err := f.Seek(start-1, 0)
-		if err != nil {
-			return err
-		}
-
-		buf := make([]byte, 1)
-		_, err = f.Read(buf)
-
-		if err != nil {
-			return err
-		}
-		shouldSkipFirstLine = buf[0] != '\n'
+	shouldSkipFirstLine, err := shouldSkipFirstLine(start, f)
+	if err != nil {
+		return err
 	}
 
 	_, err = f.Seek(start, 0)
@@ -120,4 +109,25 @@ func (m *MCMPStrategy) processChunk(start, end int64, filePath string, bufferSiz
 		}
 	}
 	return nil
+}
+
+// checks if we need to skip the first line in the chunk
+// this is for a edge case where we start at the begining of a line
+func shouldSkipFirstLine(start int64, f *os.File) (bool, error) {
+	if start == 0 {
+		return false, nil
+	}
+
+	_, err := f.Seek(start-1, 0)
+	if err != nil {
+		return false, err
+	}
+
+	buf := make([]byte, 1)
+	_, err = f.Read(buf)
+	if err != nil {
+		return false, err
+	}
+
+	return buf[0] != '\n', nil
 }
