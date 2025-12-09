@@ -40,3 +40,32 @@ func hashFnv(name []byte) uint32 {
 	}
 	return hash
 }
+
+func mergeMaps(maps []StationMap) StationMap {
+	keyCount := 0
+	for _, m := range maps {
+		keyCount += len(m)
+	}
+
+	merged := make(StationMap, keyCount)
+	for _, m := range maps {
+		for hash, res := range m {
+			if existing, exists := merged[hash]; exists {
+				if res.Maximum > existing.Maximum {
+					existing.Maximum = res.Maximum
+				}
+
+				if res.Minimum < existing.Minimum {
+					existing.Minimum = res.Minimum
+				}
+
+				existing.Sum += res.Sum
+				existing.Count += res.Count
+				merged[hash] = existing
+			} else {
+				merged[hash] = res
+			}
+		}
+	}
+	return merged
+}
