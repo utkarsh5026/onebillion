@@ -127,7 +127,7 @@ benchmark: build
 	@echo "$(GREEN)✓ Quick benchmark complete!$(RESET)"
 
 # Small benchmark (10M rows)
-bench-small: build generate-small
+bench-small: 
 	@echo ""
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo "$(CYAN)$(BOLD)  Running Small Benchmark (10M rows)$(RESET)"
@@ -136,7 +136,7 @@ bench-small: build generate-small
 	@mvn exec:java -Dexec.args="../data/measurements-10m.txt"
 
 # Medium benchmark (100M rows)
-bench-medium: build generate-medium
+bench-medium:
 	@echo ""
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo "$(CYAN)$(BOLD)  Running Medium Benchmark (100M rows)$(RESET)"
@@ -145,7 +145,7 @@ bench-medium: build generate-medium
 	@mvn exec:java -Dexec.args="../data/measurements-100m.txt"
 
 # Large benchmark (500M rows)
-bench-large: build generate-large
+bench-large:
 	@echo ""
 	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo "$(MAGENTA)$(BOLD)  Running Large Benchmark (500M rows)$(RESET)"
@@ -154,7 +154,7 @@ bench-large: build generate-large
 	@mvn exec:java -Dexec.args="../data/measurements-500m.txt"
 
 # Billion row benchmark (full challenge!)
-bench-billion: build generate-billion
+bench-billion: 
 	@echo ""
 	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo "$(MAGENTA)$(BOLD)  Running BILLION ROW CHALLENGE (1B rows)$(RESET)"
@@ -162,41 +162,16 @@ bench-billion: build generate-billion
 	@echo ""
 	@mvn exec:java -Dexec.args="../data/measurements-1b.txt"
 
-# Data generation targets
-generate-small:
-	@echo "$(BLUE)▶ Generating 10M rows...$(RESET)"
-	@mkdir -p ../data
-	@python $(GENERATOR) 10000000
-	@echo "$(GREEN)✓ Generated: ../data/measurements-10m.txt$(RESET)"
 
-generate-medium:
-	@echo "$(BLUE)▶ Generating 100M rows...$(RESET)"
-	@mkdir -p ../data
-	@python $(GENERATOR) 100000000
-	@echo "$(GREEN)✓ Generated: ../data/measurements-100m.txt$(RESET)"
 
-generate-large:
-	@echo "$(BLUE)▶ Generating 500M rows...$(RESET)"
-	@mkdir -p ../data
-	@python $(GENERATOR) 500000000
-	@echo "$(GREEN)✓ Generated: ../data/measurements-500m.txt$(RESET)"
-
-generate-billion:
-	@echo "$(BLUE)▶ Generating 1B rows...$(RESET)"
-	@mkdir -p ../data
-	@python $(GENERATOR) 1000000000
-	@echo "$(GREEN)✓ Generated: ../data/measurements-1b.txt$(RESET)"
-
-# Clean compiled files and generated data
+# Clean compiled files
 clean:
 	@echo "$(RED)▶ Cleaning up...$(RESET)"
 	@rm -rf $(BUILD_DIR)
-	@rm -f ../data/measurements-*.txt
 	@echo "$(GREEN)✓ Clean complete!$(RESET)"
 
 # Clean everything including Maven cache
 clean-all:
 	@echo "$(RED)▶ Removing all generated files and directories...$(RESET)"
 	@rm -rf $(BUILD_DIR)
-	@rm -rf ../data
 	@echo "$(GREEN)✓ Deep clean complete!$(RESET)"
