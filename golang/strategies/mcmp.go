@@ -343,7 +343,7 @@ func (m *MCMPLinearProbingOptimized) read(bufferSize int, start, end int64, f *o
 			line := filledBuf[buffIdx : buffIdx+lineEndIdx]
 			buffIdx += lineEndIdx + 1
 
-			name, value, err := parseLineAdvanced(line)
+			name, value, err := parseLineByte(line)
 			if err != nil {
 				continue
 			}
