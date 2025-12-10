@@ -2,19 +2,20 @@ package com.onebillion.strategies;
 
 import org.jetbrains.annotations.NotNull;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.*;
 
 public class BatchProcessor {
-    private static  final List<Station> POISON_PILL = Collections.emptyList();
+    private static  final Station[] POISON_PILL = new Station[0];
     final int processors = Runtime.getRuntime().availableProcessors();
     ExecutorService executor = Executors.newFixedThreadPool(processors);
 
 
-    List<StationResult> analyze(String filepath) throws ExecutionException, InterruptedException {
-        BlockingQueue<List<Station>> queue = new ArrayBlockingQueue<>(processors * 2);
+    List<StationResult> analyze(String filepath) throws ExecutionException, InterruptedException, IOException {
+        BlockingQueue<Station[]> queue = new ArrayBlockingQueue<>(processors * 4);
         var tasks = getCallables(queue);
         var futures = submitTasks(tasks);
 
@@ -35,7 +36,7 @@ public class BatchProcessor {
         );
     }
 
-    private @NotNull List<Callable<Map<String, StationResult>>> getCallables(BlockingQueue<List<Station>> queue) {
+    private @NotNull List<Callable<Map<String, StationResult>>> getCallables(BlockingQueue<Station[]> queue) {
         List<Callable<Map<String, StationResult>>> tasks = new ArrayList<>();
 
         for  (int i = 0; i < processors; i++) {
@@ -47,8 +48,7 @@ public class BatchProcessor {
                         break;
                     }
                     for (var station : batch) {
-                        localResults.putIfAbsent(station.name(), new StationResult());
-                        localResults.get(station.name()).add((long)(station.value() * 10));
+                        Objects.requireNonNull(localResults.putIfAbsent(station.name(), new StationResult())).add(station.value());
                     }
                 }
                 return localResults;
@@ -57,28 +57,30 @@ public class BatchProcessor {
         return tasks;
     }
 
-    private void readFile(String filepath, BlockingQueue<List<Station>> queue) {
+    private void readFile(String filepath, BlockingQueue<Station[]> queue) throws IOException {
         var path = Paths.get(filepath);
+        int batchSize = 10000;
         try (var reader = Files.newBufferedReader(path)) {
-            List<Station> batch = new ArrayList<>(100);
+            Station[] batch = new Station[batchSize];
+            int batchIndex = 0;
             String line;
             while ((line = reader.readLine()) != null) {
                 var station = LineParser.parseLineStandard(line);
-                batch.add(station);
-                if (batch.size() >= 100) {
-                    queue.put(new ArrayList<>(batch));
-                    batch.clear();
+                batch[batchIndex++] = station;
+                if (batchIndex >= batchSize) {
+                    queue.put(Arrays.copyOf(batch, batchIndex));
+                    batchIndex = 0;
                 }
             }
 
-            if (!batch.isEmpty()) {
-                queue.put(batch);
+            if (batchIndex > 0) {
+                queue.put(Arrays.copyOf(batch, batchIndex));
             }
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
             try {
-                for (int i = 0; i < Runtime.getRuntime().availableProcessors(); i++) {
+                for (int i = 0; i < processors; i++) {
                     queue.put(POISON_PILL);
                 }
             } catch (InterruptedException e) {
