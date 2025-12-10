@@ -88,28 +88,46 @@ func BenchmarkBatchStrategy(b *testing.B) {
 	}
 }
 
-// BenchmarkParseLineBasic benchmarks the basic line parsing function
-func BenchmarkParseLineBasic(b *testing.B) {
-	testLine := "Hamburg;12.0"
+// BenchmarkParseLineFunctions compares all three parsing functions
+func BenchmarkParseLineFunctions(b *testing.B) {
+	testLineString := "Hamburg;12.0"
+	testLineBytes := []byte("Hamburg;12.0")
 
-	for b.Loop() {
-		_, _, err := parseLineBasic(testLine)
-		if err != nil {
-			b.Fatalf("parseLineBasic failed: %v", err)
+	b.Run("Basic", func(b *testing.B) {
+		for b.Loop() {
+			_, _, err := parseLineBasic(testLineString)
+			if err != nil {
+				b.Fatalf("parseLineBasic failed: %v", err)
+			}
 		}
-	}
-}
+	})
 
-// BenchmarkParseLineByte benchmarks the byte-based line parsing function
-func BenchmarkParseLineByte(b *testing.B) {
-	testLine := []byte("Hamburg;12.0")
-
-	for b.Loop() {
-		_, _, err := parseLineByte(testLine)
-		if err != nil {
-			b.Fatalf("parseLineByte failed: %v", err)
+	b.Run("Byte", func(b *testing.B) {
+		for b.Loop() {
+			_, _, err := parseLineByte(testLineBytes)
+			if err != nil {
+				b.Fatalf("parseLineByte failed: %v", err)
+			}
 		}
-	}
+	})
+
+	b.Run("Advanced", func(b *testing.B) {
+		for b.Loop() {
+			_, _, err := parseLineAdvanced(testLineBytes)
+			if err != nil {
+				b.Fatalf("parseLineAdvanced failed: %v", err)
+			}
+		}
+	})
+
+	b.Run("Ultra", func(b *testing.B) {
+		for b.Loop() {
+			_, _, err := parseLineUltra(testLineBytes)
+			if err != nil {
+				b.Fatalf("parseLineUltra failed: %v", err)
+			}
+		}
+	})
 }
 
 // BenchmarkHashFnv benchmarks the FNV hashing function

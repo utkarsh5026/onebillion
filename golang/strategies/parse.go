@@ -31,6 +31,75 @@ func parseLineByte(line []byte) (name []byte, value int64, err error) {
 	return name, value, err
 }
 
+func parseLineAdvanced(line []byte) (name []byte, value int64, err error) {
+	semiColIdx := -1
+	for i := range line {
+		if line[i] == ';' {
+			semiColIdx = i
+			break
+		}
+	}
+
+	if semiColIdx == -1 {
+		return nil, -1, fmt.Errorf("invalid line format")
+	}
+
+	name = line[:semiColIdx]
+	valBytes := line[semiColIdx+1:]
+
+	var val int64
+	neg := false
+	vIDx := 0
+
+	if len(valBytes) > 0 && valBytes[0] == '-' {
+		neg = true
+		vIDx++
+	}
+
+	for ; vIDx < len(valBytes); vIDx++ {
+		if valBytes[vIDx] == '.' {
+			continue
+		}
+		val = val*10 + int64(valBytes[vIDx]-'0')
+	}
+	if neg {
+		val = -val
+	}
+
+	return name, val, nil
+}
+
+func parseLineUltra(line []byte) (name []byte, value int64, err error) {
+	semiColIdx := bytes.IndexByte(line, ';')
+	if semiColIdx == -1 {
+		return nil, -1, fmt.Errorf("invalid line format")
+	}
+
+	name = line[:semiColIdx]
+	valBytes := line[semiColIdx+1:]
+
+	var val int64
+	neg := false
+	vIDx := 0
+
+	if len(valBytes) > 0 && valBytes[0] == '-' {
+		neg = true
+		vIDx++
+	}
+
+	for ; vIDx < len(valBytes); vIDx++ {
+		if valBytes[vIDx] == '.' {
+			continue
+		}
+		val = val*10 + int64(valBytes[vIDx]-'0')
+	}
+	if neg {
+		val = -val
+	}
+
+	return name, val, nil
+}
+
 func byteToInt(b []byte) (int64, error) {
 	var result int64
 	for i := range b {
