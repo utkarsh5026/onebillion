@@ -49,42 +49,36 @@ func getTestDataFile(b *testing.B) string {
 	return generateTempTestData(b, 100_000)
 }
 
-// BenchmarkBasicStrategy benchmarks the basic string-based strategy
-func BenchmarkBasicStrategy(b *testing.B) {
-	dataFile := getTestDataFile(b)
-	strategy := &BasicStrategy{}
+// strategyBenchmark holds a strategy and its name for benchmarking
+type strategyBenchmark struct {
+	name     string
+	strategy Strategy
+}
 
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("BasicStrategy failed: %v", err)
-		}
+// getAllStrategies returns all strategies to benchmark
+func getAllStrategies() []strategyBenchmark {
+	return []strategyBenchmark{
+		{"Basic", &BasicStrategy{}},
+		{"ByteReading", &ByteReadingStrategy{}},
+		{"Batch", &BatchStrategy{}},
+		{"MCMP", &MCMPStrategy{}},
 	}
 }
 
-// BenchmarkByteReadingStrategy benchmarks the byte-based strategy with hashing
-func BenchmarkByteReadingStrategy(b *testing.B) {
+// BenchmarkAllStrategies benchmarks all strategies
+func BenchmarkAllStrategies(b *testing.B) {
 	dataFile := getTestDataFile(b)
-	strategy := &ByteReadingStrategy{}
+	strategies := getAllStrategies()
 
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("ByteReadingStrategy failed: %v", err)
-		}
-	}
-}
-
-// BenchmarkBatchStrategy benchmarks the concurrent batch processing strategy
-func BenchmarkBatchStrategy(b *testing.B) {
-	dataFile := getTestDataFile(b)
-	strategy := &BatchStrategy{}
-
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("BatchStrategy failed: %v", err)
-		}
+	for _, s := range strategies {
+		b.Run(s.name, func(b *testing.B) {
+			for b.Loop() {
+				_, err := s.strategy.Calculate(dataFile)
+				if err != nil {
+					b.Fatalf("%s failed: %v", s.name, err)
+				}
+			}
+		})
 	}
 }
 
@@ -163,76 +157,23 @@ func BenchmarkByteToInt(b *testing.B) {
 	}
 }
 
-// BenchmarkMemory tests memory allocation patterns
-func BenchmarkBasicStrategyMemory(b *testing.B) {
+// BenchmarkAllStrategiesMemory tests memory allocation patterns for all strategies
+func BenchmarkAllStrategiesMemory(b *testing.B) {
 	dataFile := getTestDataFile(b)
-	strategy := &BasicStrategy{}
+	strategies := getAllStrategies()
 
-	b.ReportAllocs()
+	for _, s := range strategies {
+		b.Run(s.name, func(b *testing.B) {
+			b.ReportAllocs()
 
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("BasicStrategy failed: %v", err)
-		}
-	}
-}
-
-func BenchmarkByteReadingStrategyMemory(b *testing.B) {
-	dataFile := getTestDataFile(b)
-	strategy := &ByteReadingStrategy{}
-
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("ByteReadingStrategy failed: %v", err)
-		}
-	}
-}
-
-func BenchmarkBatchStrategyMemory(b *testing.B) {
-	dataFile := getTestDataFile(b)
-	strategy := &BatchStrategy{}
-
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("BatchStrategy failed: %v", err)
-		}
-	}
-}
-
-// BenchmarkBatchStrategyParallel benchmarks the batch strategy with varying CPU counts
-func BenchmarkBatchStrategyWithCPUs(b *testing.B) {
-	dataFile := getTestDataFile(b)
-
-	cpuCounts := []int{1, 2, 4, 8}
-	originalCPU := runtime.GOMAXPROCS(0)
-
-	for _, numCPU := range cpuCounts {
-		if numCPU > runtime.NumCPU() {
-			continue
-		}
-
-		b.Run(formatCPUCount(numCPU), func(b *testing.B) {
-			runtime.GOMAXPROCS(numCPU)
-			strategy := &BatchStrategy{}
-
-			b.ResetTimer()
 			for b.Loop() {
-				_, err := strategy.Calculate(dataFile)
+				_, err := s.strategy.Calculate(dataFile)
 				if err != nil {
-					b.Fatalf("BatchStrategy failed: %v", err)
+					b.Fatalf("%s failed: %v", s.name, err)
 				}
 			}
 		})
 	}
-
-	runtime.GOMAXPROCS(originalCPU)
 }
 
 func formatCPUCount(n int) string {
@@ -242,59 +183,34 @@ func formatCPUCount(n int) string {
 	return string(rune('0'+n)) + "CPUs"
 }
 
-// BenchmarkMCMPStrategy benchmarks the multi-core multi-processing strategy
-func BenchmarkMCMPStrategy(b *testing.B) {
+// BenchmarkAllStrategiesWithCPUs benchmarks all strategies with varying CPU counts
+func BenchmarkAllStrategiesWithCPUs(b *testing.B) {
 	dataFile := getTestDataFile(b)
-	strategy := &MCMPStrategy{}
-
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("MCMPStrategy failed: %v", err)
-		}
-	}
-}
-
-// BenchmarkMCMPStrategyMemory benchmarks memory allocation for MCMP strategy
-func BenchmarkMCMPStrategyMemory(b *testing.B) {
-	dataFile := getTestDataFile(b)
-	strategy := &MCMPStrategy{}
-
-	b.ReportAllocs()
-
-	for b.Loop() {
-		_, err := strategy.Calculate(dataFile)
-		if err != nil {
-			b.Fatalf("MCMPStrategy failed: %v", err)
-		}
-	}
-}
-
-// BenchmarkMCMPStrategyWithCPUs benchmarks the MCMP strategy with varying CPU counts
-func BenchmarkMCMPStrategyWithCPUs(b *testing.B) {
-	dataFile := getTestDataFile(b)
+	strategies := getAllStrategies()
 
 	cpuCounts := []int{1, 2, 4, 8, 16}
 	originalCPU := runtime.GOMAXPROCS(0)
+	defer runtime.GOMAXPROCS(originalCPU)
 
-	for _, numCPU := range cpuCounts {
-		if numCPU > runtime.NumCPU() {
-			continue
-		}
-
-		b.Run(formatCPUCount(numCPU), func(b *testing.B) {
-			runtime.GOMAXPROCS(numCPU)
-			strategy := &MCMPStrategy{}
-
-			b.ResetTimer()
-			for b.Loop() {
-				_, err := strategy.Calculate(dataFile)
-				if err != nil {
-					b.Fatalf("MCMPStrategy failed: %v", err)
+	for _, s := range strategies {
+		b.Run(s.name, func(b *testing.B) {
+			for _, numCPU := range cpuCounts {
+				if numCPU > runtime.NumCPU() {
+					continue
 				}
+
+				b.Run(formatCPUCount(numCPU), func(b *testing.B) {
+					runtime.GOMAXPROCS(numCPU)
+
+					b.ResetTimer()
+					for b.Loop() {
+						_, err := s.strategy.Calculate(dataFile)
+						if err != nil {
+							b.Fatalf("%s failed: %v", s.name, err)
+						}
+					}
+				})
 			}
 		})
 	}
-
-	runtime.GOMAXPROCS(originalCPU)
 }
