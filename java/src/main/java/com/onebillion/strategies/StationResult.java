@@ -13,6 +13,26 @@ public class StationResult {
     this.stationName = stationName;
   }
 
+  public String getStationName() {
+    return stationName;
+  }
+
+  public long getMin() {
+    return min;
+  }
+
+  public long getMax() {
+    return max;
+  }
+
+  public long getSum() {
+    return sum;
+  }
+
+  public long getCount() {
+    return count;
+  }
+
   void add(long value) {
     min = Math.min(min, value);
     max = Math.max(max, value);
