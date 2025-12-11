@@ -166,7 +166,7 @@ public class BenchmarkResult {
             result.validation.extraStations);
 
         if (!result.validation.errors.isEmpty()) {
-          int errorsToShow = Math.min(10, result.validation.errors.size());
+          int errorsToShow = Math.min(20, result.validation.errors.size());
           System.out.printf("  Showing first %d errors:%n", errorsToShow);
           for (int i = 0; i < errorsToShow; i++) {
             System.out.println("    " + result.validation.errors.get(i));

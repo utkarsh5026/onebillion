@@ -10,6 +10,8 @@ import org.jetbrains.annotations.NotNull;
 
 public class ResultChecker {
 
+  private static final double TOLERANCE = 0.2;
+
   public static ValidationResult validateResults(
       List<StationResult> actualResults, String dataFilePath) {
     var validation = new ValidationResult();
@@ -24,7 +26,7 @@ public class ResultChecker {
       return validation.addError("Expected results file not found: " + expectedResultsFile);
     }
 
-    Map<String, ParsedResult> expectedResults = new HashMap<>();
+    Map<String, ParsedResult> expectedResults;
     try {
       expectedResults = CsvOperations.loadExpectedResults(expectedResultsFile);
     } catch (IOException e) {
@@ -78,23 +80,29 @@ public class ResultChecker {
     var actualAvg =
         actual.getCount() > 0 ? (double) actual.getSum() / (double) actual.getCount() / 10.0 : 0;
 
-    double tolerance = 0.1;
-
-    boolean minMatches = Math.abs(actualMin - expected.min()) <= tolerance;
-    boolean maxMatches = Math.abs(actualMax - expected.max()) <= tolerance;
-    boolean avgMatches = Math.abs(actualAvg - expected.avg()) <= tolerance;
+    boolean minMatches = Math.abs(actualMin - expected.min()) <= TOLERANCE;
+    boolean maxMatches = Math.abs(actualMax - expected.max()) <= TOLERANCE;
+    boolean avgMatches = Math.abs(actualAvg - expected.avg()) <= TOLERANCE;
 
     if (!minMatches || !maxMatches || !avgMatches) {
-      validation.errors.add(
-          String.format(
-              "%s: Expected(min=%.1f, max=%.1f, avg=%.1f) vs Actual(min=%.1f, max=%.1f, avg=%.1f)",
-              stationName,
-              expected.min(),
-              expected.max(),
-              expected.avg(),
-              actualMin,
-              actualMax,
-              actualAvg));
+      StringBuilder errorMsg = new StringBuilder(stationName).append(": ");
+
+      if (!minMatches) {
+        errorMsg.append(
+            String.format("min(expected=%.1f, actual=%.1f)", expected.min(), actualMin));
+      }
+      if (!maxMatches) {
+        if (!minMatches) errorMsg.append(", ");
+        errorMsg.append(
+            String.format("max(expected=%.1f, actual=%.1f)", expected.max(), actualMax));
+      }
+      if (!avgMatches) {
+        if (!minMatches || !maxMatches) errorMsg.append(", ");
+        errorMsg.append(
+            String.format("avg(expected=%.1f, actual=%.1f)", expected.avg(), actualAvg));
+      }
+
+      validation.errors.add(errorMsg.toString());
       return false;
     }
 

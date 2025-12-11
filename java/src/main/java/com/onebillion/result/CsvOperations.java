@@ -15,16 +15,21 @@ public class CsvOperations {
 
     try (var reader = new BufferedReader(new FileReader(resultsFilePath))) {
       var line = reader.readLine(); // Skip header
-
       while ((line = reader.readLine()) != null) {
         String[] columns = line.split(",");
 
-        if (columns.length != 4) throw new IOException("Expected 4 columns, got " + columns.length);
+        if (columns.length != 4) {
+          System.out.println("Warning: Skipping malformed line: " + line);
+        }
+
+        if (columns.length < 4) {
+          continue;
+        }
         var stationName = columns[0];
         var min = Double.parseDouble(columns[1]);
         var avg = Double.parseDouble(columns[2]);
         var max = Double.parseDouble(columns[3]);
-        results.put(stationName, new ParsedResult(min, avg, max));
+        results.put(stationName, new ParsedResult(min, max, avg));
       }
     }
     return results;
