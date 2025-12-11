@@ -40,11 +40,16 @@ public class MCMPStrategy implements Strategy {
     for (int i = 0; i < processors; i++) {
       long start = (long) i * chunkSize;
       long end = (i == processors - 1) ? fileSize : start + chunkSize;
-      long size = end - start;
 
-      var buffer = channel.map(FileChannel.MapMode.READ_ONLY, start + 128, size);
+      // Extend the chunk to read up to 128 bytes past the boundary to catch the last
+      // complete line
+      long extendedEnd = (i == processors - 1) ? fileSize : Math.min(end + 128, fileSize);
+      long size = extendedEnd - start;
+
+      var buffer = channel.map(FileChannel.MapMode.READ_ONLY, start, size);
       final int workerId = i;
-      futures.add(executor.submit(() -> processChunk(buffer, workerId == 0)));
+      final boolean isLast = i == processors - 1;
+      futures.add(executor.submit(() -> processChunk(buffer, workerId == 0, isLast, start, extendedEnd)));
     }
     return futures;
   }
@@ -62,29 +67,37 @@ public class MCMPStrategy implements Strategy {
     return results;
   }
 
-  private @NotNull Map<String, StationResult> processChunk(MappedByteBuffer buffer, boolean isFirst) {
+  private @NotNull Map<String, StationResult> processChunk(
+      MappedByteBuffer buffer, boolean isFirst, boolean isLast, long start, long end) {
     Map<String, StationResult> results = new HashMap<>(100_000);
     if (!isFirst) {
-      while (buffer.hasRemaining() && buffer.get() != '\n');
+      while (buffer.hasRemaining() && buffer.get() != '\n')
+        ;
     }
 
     byte[] lineBuffer = new byte[128];
     int linePos = 0;
+    boolean overflow = false;
 
     while (buffer.hasRemaining()) {
       byte b = buffer.get();
 
-      if ((b == '\n' || b == '\r') && linePos > 0) {
-        processLine(lineBuffer, linePos, results);
+      if (b == '\n' || b == '\r') {
+        if (linePos > 0 && !overflow) {
+          processLine(lineBuffer, linePos, results);
+        }
         linePos = 0;
-      } else {
+        overflow = false;
+      } else if (!overflow) {
         if (linePos < lineBuffer.length) {
           lineBuffer[linePos++] = b;
+        } else {
+          overflow = true;
         }
       }
     }
 
-    if (linePos > 0) {
+    if (linePos > 0 && !overflow && isLast) {
       processLine(lineBuffer, linePos, results);
     }
     return results;
