@@ -1,6 +1,8 @@
 import json
 import multiprocessing as mp
 import sys
+import csv
+import copy
 import tempfile
 import time
 from dataclasses import dataclass
@@ -72,7 +74,7 @@ def load_and_prepare_stations() -> tuple[np.ndarray, np.ndarray, np.ndarray, int
 STATION_NAMES, STATION_TEMPS, TEMP_LOOKUP, TEMP_OFFSET = load_and_prepare_stations()
 POOL_SIZE = 5_000_000
 
-GLOABAL_STATION_INDICES = np.random.randint(0, len(STATION_NAMES), size=POOL_SIZE)
+GLOBAL_STATION_INDICES = np.random.randint(0, len(STATION_NAMES), size=POOL_SIZE)
 GLOBAL_TEMP_INDICES = np.random.randint(0, len(TEMP_LOOKUP), size=POOL_SIZE)
 
 
@@ -121,6 +123,7 @@ class FileGenerator:
         self.progress_lock = Lock()
         self.results_path = results_path
         self.worker_batch_size = worker_batch_size
+        self.station_stats: dict[str, StationResult] = {}
 
     def start(self):
         """
@@ -158,7 +161,9 @@ class FileGenerator:
             p.join()
 
         merge_start = time.time()
+        self.__aggregate_stats(return_dict)
         self.__merge_temp_files(temp_files)
+        self.__write_results_csv()
         self.__print_write_time(start_time)
         self.__print_final_stats(start_time, merge_start)
 
@@ -168,26 +173,64 @@ class FileGenerator:
         self, worker_id: int, num_rows: int, temp_file: str, return_dict: DictProxy
     ) -> None:
         rows_cnt = 0
+        n = len(STATION_NAMES)
+        w_min = np.full(n, 9999.0, dtype=np.float32)
+        w_max = np.full(n, -9999.0, dtype=np.float32)
+        w_sum = np.zeros(n, dtype=np.float64)
+        w_count = np.zeros(n, dtype=np.int32)
 
         with open(temp_file, "wb", buffering=8192 * 1024) as f:
             while rows_cnt < num_rows:
                 batch_size = min(self.worker_batch_size, num_rows - rows_cnt)
-                batch = self._create_worker_batch(batch_size)
 
-                f.write(batch)
+                st_indices, temp_indices = self._get_batch_indices(batch_size)
+
+                lines = STATION_NAMES[st_indices] + TEMP_LOOKUP[temp_indices]
+                batch_bytes = b"".join(lines.tolist())
+                f.write(batch_bytes)
+
+                actual_temps = (temp_indices - TEMP_OFFSET) / 10.0
+
+                np.minimum.at(w_min, st_indices, actual_temps)
+                np.maximum.at(w_max, st_indices, actual_temps)
+                np.add.at(w_sum, st_indices, actual_temps)
+                np.add.at(w_count, st_indices, 1)
+
                 rows_cnt += batch_size
 
                 with self.progress_lock:
                     self.progress_counter.value += batch_size
 
-        return_dict[worker_id] = {}  # Empty dict, no stats calculated
+        worker_result = {}
+
+        active_indices = np.where(w_count > 0)[0]
+
+        for idx in active_indices:
+            raw_name: bytes = STATION_NAMES[idx]  # type: ignore[assignment]
+            name = raw_name.decode("utf-8")[:-1]
+
+            worker_result[name] = StationResult(
+                min_temp=float(w_min[idx]),
+                max_temp=float(w_max[idx]),
+                sum_temp=float(w_sum[idx]),
+                count=int(w_count[idx]),
+            )
+
+        return_dict[worker_id] = worker_result
+
+    @staticmethod
+    def _get_batch_indices(batch_size: int) -> tuple[np.ndarray, np.ndarray]:
+        """Returns the indices for stations and temps from the global pool."""
+        start = np.random.randint(0, POOL_SIZE - batch_size + 1)
+        end = start + batch_size
+        return GLOBAL_STATION_INDICES[start:end], GLOBAL_TEMP_INDICES[start:end]
 
     @staticmethod
     def _create_worker_batch(batch_size: int) -> bytes:
         start = np.random.randint(0, POOL_SIZE - batch_size + 1)
         end = start + batch_size
 
-        stations = GLOABAL_STATION_INDICES[start:end]
+        stations = GLOBAL_STATION_INDICES[start:end]
         temps = GLOBAL_TEMP_INDICES[start:end]
 
         lines = STATION_NAMES[stations] + TEMP_LOOKUP[temps]
@@ -296,10 +339,66 @@ class FileGenerator:
         print(
             f"{Colors.BLUE}File size:{Colors.RESET}      {Colors.BOLD}{file_size_mb:.2f} MB{Colors.RESET}"
         )
-        print(
-            f"{Colors.BLUE}Throughput:{Colors.RESET}     {Colors.BOLD}{self.num_rows/total_time:,.0f} rows/s{Colors.RESET}"
-        )
         print(f"{Colors.BOLD}{'='*70}{Colors.RESET}\n")
+
+    def __aggregate_stats(self, return_dict: DictProxy):
+        """Aggregate statistics from all workers."""
+        print(
+            f"\n{Colors.YELLOW}>> Aggregating statistics from workers...{Colors.RESET}"
+        )
+        for worker_id in return_dict:
+            worker_stats = return_dict[worker_id]
+            for station_name, stats in worker_stats.items():
+                if station_name not in self.station_stats:
+                    self.station_stats[station_name] = copy.copy(stats)
+                else:
+                    self.station_stats[station_name].update(stats)
+
+    def __write_results_csv(self):
+        """Write aggregated statistics to results CSV file."""
+        if not self.results_path:
+            return
+
+        print(
+            f"{Colors.YELLOW}>> Writing verification results (Truth) to CSV...{Colors.RESET}"
+        )
+
+        results_folder = Path(self.results_path).parent
+        if results_folder and not results_folder.exists():
+            results_folder.mkdir(parents=True, exist_ok=True)
+
+        results = self.__prepare_csv_data()
+
+        if len(results) == 0:
+            return
+
+        with open(self.results_path, "w", newline="", encoding="utf-8") as csvfile:
+            fieldnames = ["station", "min", "mean", "max"]
+            w = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            w.writeheader()
+            for row in results:
+                w.writerow(row)
+
+        print(
+            f"{Colors.GREEN}>> Results written to: {Colors.CYAN}{self.results_path}{Colors.RESET}"
+        )
+
+    def __prepare_csv_data(self) -> list[dict]:
+        results = []
+        for station_name, stats in self.station_stats.items():
+            avg = stats.sum_temp / stats.count if stats.count > 0 else 0.0
+            results.append(
+                {
+                    "station": station_name,
+                    "min": round(stats.min_temp, 1),
+                    "mean": round(avg, 1),
+                    "max": round(stats.max_temp, 1),
+                }
+            )
+
+        results.sort(key=lambda x: x["station"])
+        return results
 
 
 def get_num_rows() -> int:
