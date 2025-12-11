@@ -1,5 +1,6 @@
 # Generated data directory
 data/
+results/
 
 # Python
 __pycache__/
