@@ -3,10 +3,15 @@ package com.onebillion.strategies;
 import org.jetbrains.annotations.NotNull;
 
 public class StationResult {
+  String stationName;
   long min = Long.MAX_VALUE;
   long max = Long.MIN_VALUE;
   long sum = 0;
   long count = 0;
+
+  public StationResult(String stationName) {
+    this.stationName = stationName;
+  }
 
   void add(long value) {
     min = Math.min(min, value);

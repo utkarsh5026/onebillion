@@ -33,10 +33,10 @@ public class MCMPStrategy implements Strategy {
     }
   }
 
-  private @NotNull List<Future<Map<String, StationResult>>> launchWorkers(
+  private @NotNull List<Future<Map<Integer, StationResult>>> launchWorkers(
       long chunkSize, long fileSize, FileChannel channel, ExecutorService executor)
       throws IOException {
-    List<Future<Map<String, StationResult>>> futures = new ArrayList<>(processors);
+    List<Future<Map<Integer, StationResult>>> futures = new ArrayList<>(processors);
     for (int i = 0; i < processors; i++) {
       long start = (long) i * chunkSize;
       long end = (i == processors - 1) ? fileSize : start + chunkSize;
@@ -49,14 +49,14 @@ public class MCMPStrategy implements Strategy {
       var buffer = channel.map(FileChannel.MapMode.READ_ONLY, start, size);
       final int workerId = i;
       final boolean isLast = i == processors - 1;
-      futures.add(executor.submit(() -> processChunk(buffer, workerId == 0, isLast, start, extendedEnd)));
+      futures.add(executor.submit(() -> processChunk(buffer, workerId == 0, isLast)));
     }
     return futures;
   }
 
-  private @NotNull List<Map<String, StationResult>> waitForResult(
-      @NotNull List<Future<Map<String, StationResult>>> futures) {
-    List<Map<String, StationResult>> results = new ArrayList<>();
+  private @NotNull List<Map<Integer, StationResult>> waitForResult(
+      @NotNull List<Future<Map<Integer, StationResult>>> futures) {
+    List<Map<Integer, StationResult>> results = new ArrayList<>();
     for (var future : futures) {
       try {
         results.add(future.get());
@@ -67,45 +67,70 @@ public class MCMPStrategy implements Strategy {
     return results;
   }
 
-  private @NotNull Map<String, StationResult> processChunk(
-      MappedByteBuffer buffer, boolean isFirst, boolean isLast, long start, long end) {
-    Map<String, StationResult> results = new HashMap<>(100_000);
+  private @NotNull Map<Integer, StationResult> processChunk(
+      MappedByteBuffer buffer, boolean isFirst, boolean isLast) {
+    Map<Integer, StationResult> results = new HashMap<>(100_000);
     if (!isFirst) {
       while (buffer.hasRemaining() && buffer.get() != '\n')
         ;
     }
 
-    byte[] lineBuffer = new byte[128];
-    int linePos = 0;
-    boolean overflow = false;
-
     while (buffer.hasRemaining()) {
-      byte b = buffer.get();
+      int stringStart = buffer.position();
 
-      if (b == '\n' || b == '\r') {
-        if (linePos > 0 && !overflow) {
-          processLine(lineBuffer, linePos, results);
+      // Read station name and compute its hash
+      int hash = 1;
+      byte b;
+      while (buffer.hasRemaining() && (b = buffer.get()) != ';') {
+        hash = 31 * hash + b;
+      }
+
+      // If we ran out of buffer before finding ';', this is an incomplete line - skip it
+      if (!buffer.hasRemaining()) {
+        break;
+      }
+
+      int nameLen = buffer.position() - stringStart - 1;
+
+      // parse the numeric value
+      int temp = 0;
+      boolean negative = false;
+
+      while (buffer.hasRemaining() && (b = buffer.get()) != '\n' && b != '\r') {
+        if (b == '-') {
+          negative = true;
+          continue;
         }
-        linePos = 0;
-        overflow = false;
-      } else if (!overflow) {
-        if (linePos < lineBuffer.length) {
-          lineBuffer[linePos++] = b;
-        } else {
-          overflow = true;
+        if (b == '.') {
+          // Skip decimal point
+          continue;
         }
+        temp = temp * 10 + (b - '0');
+      }
+
+      // If we ran out of buffer before finding '\n', this is an incomplete line - skip it
+      if (!buffer.hasRemaining() && !isLast) {
+        break;
+      }
+
+      if (negative) {
+        temp = -temp;
+      }
+
+      // Update StationResult in the map
+      if (results.containsKey(hash)) {
+        results.get(hash).add(temp);
+      } else {
+        int savedPos = buffer.position();
+        byte[] nameBytes = new byte[nameLen];
+        buffer.position(stringStart);
+        buffer.get(nameBytes);
+        buffer.position(savedPos);
+        var stationResult = new StationResult(new String(nameBytes));
+        stationResult.add(temp);
+        results.put(hash, stationResult);
       }
     }
-
-    if (linePos > 0 && !overflow && isLast) {
-      processLine(lineBuffer, linePos, results);
-    }
     return results;
-  }
-
-  private void processLine(
-      byte[] lineBuffer, int length, @NotNull Map<String, StationResult> results) {
-    var station = LineParser.processLine(lineBuffer, length);
-    results.computeIfAbsent(station.name(), k -> new StationResult()).add(station.value());
   }
 }
