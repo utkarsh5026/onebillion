@@ -1,12 +1,14 @@
 package com.onebillion;
 
-import static com.onebillion.result.Color.*;
+import static com.onebillion.result.Color.COLOR_BLUE;
+import static com.onebillion.result.Color.COLOR_BOLD;
+import static com.onebillion.result.Color.COLOR_CYAN;
+import static com.onebillion.result.Color.COLOR_RESET;
+import static com.onebillion.result.Color.COLOR_YELLOW;
 
 import com.onebillion.result.BenchmarkResult;
 import com.onebillion.result.StrategyRunner;
-import com.onebillion.strategies.BatchStrategy;
 import com.onebillion.strategies.MCMPArenaStrategy;
-import com.onebillion.strategies.MCMPStrategy;
 import com.onebillion.strategies.Strategy;
 import java.io.File;
 import java.nio.file.Files;
@@ -39,10 +41,11 @@ public class Main {
 
     List<StrategyWrapper> strategies =
         List.of(
-            new StrategyWrapper("MCMP Strategy", new MCMPStrategy()),
-            new StrategyWrapper("MCMP Arena", new MCMPArenaStrategy()),
+            // new StrategyWrapper("MCMP Strategy", new MCMPStrategy()),
+            new StrategyWrapper("MCMP Arena", new MCMPArenaStrategy())
             // new StrategyWrapper("MCMP Hash probing", new MCMPOptimizedStrategy()),
-            new StrategyWrapper("Batch Strategy", new BatchStrategy()));
+            // new StrategyWrapper("Batch Strategy", new BatchStrategy())
+            );
 
     List<BenchmarkResult> results = new ArrayList<>();
 
@@ -79,7 +82,7 @@ public class Main {
   }
 
   private static Path getDataPath() {
-    var defaultPath = Paths.get("../data/measurements.txt");
+    var defaultPath = Paths.get("../data/measurements-10m.txt");
     try (var paths = Files.list(Paths.get("../data"))) {
       return paths
           .filter(p -> p.getFileName().toString().startsWith("measurements-"))
