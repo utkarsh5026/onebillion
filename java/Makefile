@@ -146,7 +146,7 @@ bench-small: build
 	@echo "$(CYAN)$(BOLD)  Running Small Benchmark (10M rows)$(RESET)"
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@mvn exec:java -Dexec.args="../data/measurements-10m.txt"
+	@java --add-modules jdk.incubator.vector -cp target/classes com.onebillion.Main ../data/measurements-10m.txt
 
 # Medium benchmark (100M rows)
 bench-large: build
@@ -155,7 +155,7 @@ bench-large: build
 	@echo "$(CYAN)$(BOLD)  Running Medium Benchmark (100M rows)$(RESET)"
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
-	@mvn exec:java -Dexec.args="../data/measurements-100m.txt"
+	@java --add-modules jdk.incubator.vector -cp target/classes com.onebillion.Main ../data/measurements-100m.txt
 
 
 # Billion row benchmark (full challenge!)
