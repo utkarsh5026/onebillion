@@ -1,4 +1,4 @@
-.PHONY: help generate generate-small generate-large generate-billion generate-all clean clean-all
+.PHONY: help generate generate-tiny generate-small generate-large generate-billion generate-all verify verify-tiny verify-small verify-large verify-billion verify-100k verify-1m verify-10m verify-100m verify-all clean clean-all
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -18,16 +18,33 @@ help:
 	@echo ""
 	@echo "$(BOLD)Available targets:$(RESET)"
 	@echo "  $(GREEN)make generate$(RESET)         - Generate 100M rows $(YELLOW)(default, ~1.4GB)$(RESET)"
+	@echo "  $(GREEN)make generate-tiny$(RESET)    - Generate 1M rows $(YELLOW)(~14MB, quick testing)$(RESET)"
 	@echo "  $(GREEN)make generate-small$(RESET)   - Generate 10M rows $(YELLOW)(~140MB, for testing)$(RESET)"
 	@echo "  $(GREEN)make generate-large$(RESET)   - Generate 100M rows $(YELLOW)(~1.4GB, standard 1BRC)$(RESET)"
 	@echo "  $(GREEN)make generate-billion$(RESET) - Generate 1B rows $(YELLOW)(~14GB, full challenge!)$(RESET)"
 	@echo "  $(MAGENTA)make generate-all$(RESET)     - Generate all datasets $(YELLOW)(10M + 100M + 1B, ~15.5GB total)$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Verification:$(RESET)"
+	@echo "  $(CYAN)make verify$(RESET)           - Verify 100M dataset $(YELLOW)(default)$(RESET)"
+	@echo "  $(CYAN)make verify-tiny$(RESET)      - Verify 1M dataset $(YELLOW)(~0.1s)$(RESET)"
+	@echo "  $(CYAN)make verify-small$(RESET)     - Verify 10M dataset $(YELLOW)(~1s)$(RESET)"
+	@echo "  $(CYAN)make verify-large$(RESET)     - Verify 100M dataset $(YELLOW)(~10s)$(RESET)"
+	@echo "  $(CYAN)make verify-billion$(RESET)   - Verify 1B dataset $(YELLOW)(if available)$(RESET)"
+	@echo "  $(MAGENTA)make verify-all$(RESET)       - Verify all available datasets"
+	@echo ""
+	@echo "$(BOLD)Cleanup:$(RESET)"
 	@echo "  $(RED)make clean$(RESET)            - Remove all generated data files"
 	@echo "  $(RED)make clean-all$(RESET)        - Remove data directory and all contents"
 	@echo ""
 
 # Generate default dataset (100M rows)
 generate: generate-large
+
+# Generate tiny dataset (1M rows) - for quick testing
+generate-tiny:
+	@echo "$(BLUE)▶ Generating 1M rows$(RESET) → $(CYAN)measurements-1m.txt$(RESET)"
+	@python generate.py 1000000
+	@echo "$(GREEN)✓ Generation complete!$(RESET)"
 
 # Generate small dataset (10M rows) - for testing
 generate-small:
@@ -50,6 +67,50 @@ generate-billion:
 # Generate all datasets (small + large + billion)
 generate-all: generate-small generate-large generate-billion
 	@echo "$(MAGENTA)✓ All datasets generated successfully!$(RESET)"
+
+# Verify default dataset (100M rows)
+verify: verify-large
+
+# Verify tiny dataset (1M rows)
+verify-tiny:
+	@echo "$(BLUE)▶ Verifying 1M rows$(RESET) → $(CYAN)results-1m.csv$(RESET)"
+	@python verify.py 1m
+	@echo "$(GREEN)✓ Verification complete!$(RESET)"
+
+# Verify small dataset (10M rows)
+verify-small:
+	@echo "$(BLUE)▶ Verifying 10M rows$(RESET) → $(CYAN)results-10m.csv$(RESET)"
+	@python verify.py 10m
+	@echo "$(GREEN)✓ Verification complete!$(RESET)"
+
+# Verify large dataset (100M rows) - default verification size
+verify-large:
+	@echo "$(BLUE)▶ Verifying 100M rows$(RESET) → $(CYAN)results-100m.csv$(RESET)"
+	@python verify.py 100m
+	@echo "$(GREEN)✓ Verification complete!$(RESET)"
+
+# Verify billion row dataset - full challenge
+verify-billion:
+	@echo "$(MAGENTA)▶ Verifying 1 BILLION rows$(RESET) → $(CYAN)results-1b.csv$(RESET)"
+	@python verify.py 1b
+	@echo "$(GREEN)✓ Verification complete!$(RESET)"
+
+# Verify all available datasets
+verify-all:
+	@echo "$(MAGENTA)▶ Verifying all available datasets...$(RESET)"
+	@python verify.py --all
+	@echo "$(MAGENTA)✓ All verifications complete!$(RESET)"
+
+# Legacy verification targets (for specific sizes)
+verify-100k:
+	@echo "$(CYAN)▶ Verifying 100K dataset$(RESET)"
+	@python verify.py 100k
+
+verify-1m: verify-tiny
+
+verify-10m: verify-small
+
+verify-100m: verify-large
 
 # Clean all generated data files
 clean:
