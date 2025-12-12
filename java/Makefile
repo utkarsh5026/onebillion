@@ -1,4 +1,4 @@
-.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion clean clean-all compile jar format check jmh-build jmh-run jmh-strategies jmh-parser jmh-example jmh-all
+.PHONY: help build run test benchmark bench-small bench-medium bench-large bench-billion clean clean-all compile jar format check jmh-build jmh-run jmh-strategies jmh-parser jmh-example jmh-all profile profile-cpu-only profile-memory-only profile-gc-only profile-all-data profile-jfr profile-jfr-small profile-gc profile-mem profile-cpu profile-async profile-all jmh-profile-gc jmh-profile-stack jmh-profile-perf jmh-profile-async bench-profile-compare
 
 # Color codes (ANSI)
 BLUE := \033[1;34m
@@ -46,9 +46,19 @@ help:
 	@echo "$(BOLD)Benchmarks (auto-generate + run):$(RESET)"
 	@echo "  $(GREEN)make benchmark$(RESET)        - Quick benchmark $(YELLOW)(1K rows, instant)$(RESET)"
 	@echo "  $(GREEN)make bench-small$(RESET)      - Small benchmark $(YELLOW)(10M rows, ~30s)$(RESET)"
-	@echo "  $(GREEN)make bench-medium$(RESET)     - Medium benchmark $(YELLOW)(100M rows, ~5min)$(RESET)"
-	@echo "  $(GREEN)make bench-large$(RESET)      - Large benchmark $(YELLOW)(500M rows, ~20min)$(RESET)"
+	@echo "  $(GREEN)make bench-large$(RESET)      - Large benchmark $(YELLOW)(100M rows, ~20min)$(RESET)"
 	@echo "  $(GREEN)make bench-billion$(RESET)    - Full 1B benchmark $(YELLOW)(1B rows, ~45min!)$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Profiling & Performance Analysis (Easy Mode):$(RESET)"
+	@echo "  $(YELLOW)make profile$(RESET)          - $(BOLD)Run & show CPU+Memory+GC analysis (RECOMMENDED)$(RESET)"
+	@echo "  $(YELLOW)make profile-cpu-only$(RESET) - Run & show CPU hotspots only"
+	@echo "  $(YELLOW)make profile-memory-only$(RESET) - Run & show allocation hotspots"
+	@echo "  $(YELLOW)make profile-gc-only$(RESET)  - Run & show GC statistics"
+	@echo "  $(YELLOW)make profile-all-data$(RESET) - Complete analysis with all metrics"
+	@echo ""
+	@echo "$(BOLD)Advanced Profiling (raw files for GUI tools):$(RESET)"
+	@echo "  $(YELLOW)make profile-jfr$(RESET)      - Generate JFR file (open with JMC)"
+	@echo "  $(YELLOW)make profile-async$(RESET)    - Generate flame graphs (async-profiler)"
 	@echo ""
 	@echo "$(BOLD)JMH Micro-Benchmarks (Go-style profiling):$(RESET)"
 	@echo "  $(MAGENTA)make jmh-build$(RESET)        - Build JMH benchmark JAR"
@@ -139,7 +149,7 @@ bench-small: build
 	@mvn exec:java -Dexec.args="../data/measurements-10m.txt"
 
 # Medium benchmark (100M rows)
-bench-medium: build
+bench-large: build
 	@echo ""
 	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo "$(CYAN)$(BOLD)  Running Medium Benchmark (100M rows)$(RESET)"
@@ -147,14 +157,6 @@ bench-medium: build
 	@echo ""
 	@mvn exec:java -Dexec.args="../data/measurements-100m.txt"
 
-# Large benchmark (500M rows)
-bench-large: build
-	@echo ""
-	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
-	@echo "$(MAGENTA)$(BOLD)  Running Large Benchmark (500M rows)$(RESET)"
-	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
-	@echo ""
-	@mvn exec:java -Dexec.args="../data/measurements-500m.txt"
 
 # Billion row benchmark (full challenge!)
 bench-billion: build
@@ -165,7 +167,310 @@ bench-billion: build
 	@echo ""
 	@mvn exec:java -Dexec.args="../data/measurements-1b.txt"
 
+# ═══════════════════════════════════════════════════════════════════
+# Profiling Targets - Easy Mode (Run + Analyze in One Command)
+# ═══════════════════════════════════════════════════════════════════
 
+# Main profiling command - does everything and shows results immediately
+profile: build
+	@echo ""
+	@echo "$(CYAN)$(BOLD)╔═══════════════════════════════════════════════════════════════════╗$(RESET)"
+	@echo "$(CYAN)$(BOLD)║  Complete Performance Profile - CPU + Memory + GC                ║$(RESET)"
+	@echo "$(CYAN)$(BOLD)╚═══════════════════════════════════════════════════════════════════╝$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(YELLOW)⏱️  Running benchmark with profiling enabled...$(RESET)"
+	@echo ""
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/profile.jfr,settings=profile,dumponexit=true -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:FlightRecorderOptions=stackdepth=1024"
+	@echo ""
+	@echo "$(GREEN)✓ Profiling complete! Analyzing results...$(RESET)"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(CYAN)$(BOLD)  📊 PERFORMANCE SUMMARY$(RESET)"
+	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@jfr summary profiles/profile.jfr 2>/dev/null || echo "$(YELLOW)JFR summary not available (JDK 11+ required)$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  🔥 CPU HOTSPOTS - Top Methods Consuming CPU$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@jfr print --events jdk.ExecutionSample profiles/profile.jfr 2>/dev/null | head -60 || echo "$(YELLOW)Use: jfr print --events jdk.ExecutionSample profiles/profile.jfr$(RESET)"
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)  🧠 MEMORY ALLOCATION HOTSPOTS$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@jfr print --events jdk.ObjectAllocationSample profiles/profile.jfr 2>/dev/null | head -60 || echo "$(YELLOW)Use: jfr print --events jdk.ObjectAllocationSample profiles/profile.jfr$(RESET)"
+	@echo ""
+	@echo "$(BLUE)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(BLUE)$(BOLD)  🗑️  GARBAGE COLLECTION STATISTICS$(RESET)"
+	@echo "$(BLUE)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@jfr print --events jdk.GarbageCollection profiles/profile.jfr 2>/dev/null | tail -30 || echo "$(YELLOW)Use: jfr print --events jdk.GarbageCollection profiles/profile.jfr$(RESET)"
+	@echo ""
+	@echo "$(GREEN)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(GREEN)✓ Profile saved to: $(CYAN)profiles/profile.jfr$(RESET)"
+	@echo "$(YELLOW)💡 For detailed GUI analysis run: $(CYAN)jmc -open profiles/profile.jfr$(RESET)"
+	@echo "$(GREEN)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+
+# CPU-only profiling with analysis printed to terminal
+profile-cpu-only: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  🔥 CPU Profiling - Finding Performance Bottlenecks$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(CYAN)Running with CPU profiling...$(RESET)"
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/cpu.jfr,settings=profile,dumponexit=true -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:FlightRecorderOptions=stackdepth=1024"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(CYAN)$(BOLD)  Top 25 CPU Consuming Methods$(RESET)"
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@jfr print --events jdk.ExecutionSample profiles/cpu.jfr 2>/dev/null | head -80 || jfr summary profiles/cpu.jfr
+	@echo ""
+	@echo "$(GREEN)✓ CPU profile saved: $(CYAN)profiles/cpu.jfr$(RESET)"
+	@echo ""
+
+# Memory allocation profiling with analysis
+profile-memory-only: build
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)  🧠 Memory Allocation Profiling$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(CYAN)Running with memory profiling...$(RESET)"
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/memory.jfr,settings=profile,dumponexit=true -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(CYAN)$(BOLD)  Top Allocation Sites (Objects Created)$(RESET)"
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@jfr print --events jdk.ObjectAllocationSample profiles/memory.jfr 2>/dev/null | head -80 || jfr summary profiles/memory.jfr
+	@echo ""
+	@echo "$(GREEN)✓ Memory profile saved: $(CYAN)profiles/memory.jfr$(RESET)"
+	@echo ""
+
+# GC-only profiling with analysis
+profile-gc-only: build
+	@echo ""
+	@echo "$(BLUE)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(BLUE)$(BOLD)  🗑️  Garbage Collection Profiling$(RESET)"
+	@echo "$(BLUE)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(CYAN)Running with GC profiling...$(RESET)"
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-Xlog:gc*:file=profiles/gc.log:time,level,tags -XX:+UnlockDiagnosticVMOptions"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(CYAN)$(BOLD)  GC Statistics & Pauses$(RESET)"
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@cat profiles/gc.log | grep -E "(GC|pause|Heap)" || cat profiles/gc.log | tail -40
+	@echo ""
+	@echo "$(GREEN)✓ GC log saved: $(CYAN)profiles/gc.log$(RESET)"
+	@echo "$(YELLOW)💡 Upload to https://gceasy.io for visual GC analysis$(RESET)"
+	@echo ""
+
+# Complete analysis with all data points
+profile-all-data: build
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)╔═══════════════════════════════════════════════════════════════════╗$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)║  COMPLETE PERFORMANCE ANALYSIS - All Metrics & Details           ║$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)╚═══════════════════════════════════════════════════════════════════╝$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(CYAN)Running comprehensive profiling (this may take a moment)...$(RESET)"
+	@echo ""
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/complete.jfr,settings=profile,dumponexit=true -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -Xlog:gc*:file=profiles/gc-complete.log:time,level,tags -XX:FlightRecorderOptions=stackdepth=1024"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(CYAN)$(BOLD)  📊 Overall Summary$(RESET)"
+	@echo "$(CYAN)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@jfr summary profiles/complete.jfr 2>/dev/null || echo "Detailed data in complete.jfr"
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  🔥 CPU Hotspots$(RESET)"
+	@echo "$(YELLOW)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@jfr print --events jdk.ExecutionSample profiles/complete.jfr 2>/dev/null | head -50 || echo "Data in complete.jfr"
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)  🧠 Allocation Hotspots$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@jfr print --events jdk.ObjectAllocationSample profiles/complete.jfr 2>/dev/null | head -50 || echo "Data in complete.jfr"
+	@echo ""
+	@echo "$(BLUE)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(BLUE)$(BOLD)  🗑️  GC Summary$(RESET)"
+	@echo "$(BLUE)$(BOLD)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@jfr print --events jdk.GarbageCollection profiles/complete.jfr 2>/dev/null | tail -20 || cat profiles/gc-complete.log | tail -30
+	@echo ""
+	@echo "$(GREEN)$(BOLD)════════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(GREEN)✓ Complete profile saved: $(CYAN)profiles/complete.jfr$(RESET)"
+	@echo "$(GREEN)✓ GC log saved: $(CYAN)profiles/gc-complete.log$(RESET)"
+	@echo "$(YELLOW)💡 For GUI analysis: $(CYAN)jmc -open profiles/complete.jfr$(RESET)"
+	@echo "$(GREEN)$(BOLD)════════════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+
+# ═══════════════════════════════════════════════════════════════════
+# Advanced Profiling Targets (Raw Files for External Tools)
+# ═══════════════════════════════════════════════════════════════════
+
+# Profile with Java Flight Recorder (JFR) - Modern, built-in profiler
+profile-jfr: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  Profiling with Java Flight Recorder$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(CYAN)Generating JFR profile...$(RESET)"
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/profile.jfr,settings=profile,dumponexit=true -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints"
+	@echo ""
+	@echo "$(GREEN)✓ JFR profile created!$(RESET) → $(CYAN)profiles/profile.jfr$(RESET)"
+	@echo ""
+	@echo "$(BOLD)To analyze the profile:$(RESET)"
+	@echo "  1. Open with JDK Mission Control: $(CYAN)jmc -open profiles/profile.jfr$(RESET)"
+	@echo "  2. Or use jfr CLI: $(CYAN)jfr print --events CPULoad,GarbageCollection profiles/profile.jfr$(RESET)"
+	@echo ""
+
+# Profile small benchmark with JFR
+profile-jfr-small: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  JFR Profiling - 10M Rows$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/profile-10m.jfr,settings=profile,dumponexit=true"
+	@echo "$(GREEN)✓ Profile saved:$(RESET) profiles/profile-10m.jfr"
+
+# Profile with detailed GC logging
+profile-gc: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  Profiling Garbage Collection$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-Xlog:gc*:file=profiles/gc.log:time,level,tags -XX:+PrintGCDetails -XX:+PrintGCTimeStamps"
+	@echo ""
+	@echo "$(GREEN)✓ GC log created!$(RESET) → $(CYAN)profiles/gc.log$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Analyze GC log with:$(RESET)"
+	@echo "  • GCViewer: https://github.com/chewiebug/GCViewer"
+	@echo "  • GCeasy: https://gceasy.io"
+	@echo ""
+
+# Profile memory allocation
+profile-mem: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  Profiling Memory Allocation$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-Xlog:gc*=info:file=profiles/memory.log -XX:+PrintGCDetails -XX:+PrintHeapAtGC -XX:+UnlockDiagnosticVMOptions -XX:NativeMemoryTracking=summary"
+	@echo ""
+	@echo "$(GREEN)✓ Memory profile created!$(RESET) → $(CYAN)profiles/memory.log$(RESET)"
+
+# CPU profiling with JFR (lightweight)
+profile-cpu: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  CPU Profiling with JFR$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-XX:StartFlightRecording=filename=profiles/cpu.jfr,settings=profile,dumponexit=true -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:FlightRecorderOptions=stackdepth=1024"
+	@echo ""
+	@echo "$(GREEN)✓ CPU profile created!$(RESET) → $(CYAN)profiles/cpu.jfr$(RESET)"
+	@echo ""
+	@echo "$(BOLD)Quick CPU analysis:$(RESET)"
+	@echo "  jfr print --events jdk.ExecutionSample profiles/cpu.jfr | head -50"
+	@echo ""
+
+# Profile with async-profiler (requires async-profiler installation)
+profile-async: build
+	@echo ""
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(YELLOW)$(BOLD)  Profiling with async-profiler (Flame Graphs)$(RESET)"
+	@echo "$(YELLOW)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@if [ -d "/opt/async-profiler" ] || [ -d "$$HOME/async-profiler" ]; then \
+		echo "$(CYAN)Running with async-profiler...$(RESET)"; \
+		ASYNC_PROFILER=$$(find /opt $$HOME -name "libasyncProfiler.so" 2>/dev/null | head -1); \
+		if [ -n "$$ASYNC_PROFILER" ]; then \
+			mvn exec:java \
+				-Dexec.args="../data/measurements-10m.txt" \
+				-Dexec.jvmArgs="-agentpath:$$ASYNC_PROFILER=start,event=cpu,file=profiles/flamegraph.html"; \
+			echo "$(GREEN)✓ Flame graph created!$(RESET) → $(CYAN)profiles/flamegraph.html$(RESET)"; \
+		else \
+			echo "$(RED)async-profiler library not found$(RESET)"; \
+			echo "Download from: https://github.com/async-profiler/async-profiler/releases"; \
+		fi \
+	else \
+		echo "$(YELLOW)async-profiler not installed$(RESET)"; \
+		echo ""; \
+		echo "$(BOLD)To install async-profiler:$(RESET)"; \
+		echo "  1. Download: $(CYAN)https://github.com/async-profiler/async-profiler/releases$(RESET)"; \
+		echo "  2. Extract to /opt/async-profiler or ~/async-profiler"; \
+		echo ""; \
+		echo "$(YELLOW)Using JFR instead...$(RESET)"; \
+		$(MAKE) profile-jfr; \
+	fi
+
+# Profile comparison - run multiple profiles
+profile-all: build
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)  Running Complete Profiling Suite$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@$(MAKE) profile-jfr-small
+	@$(MAKE) profile-gc
+	@echo ""
+	@echo "$(GREEN)✓ All profiles complete!$(RESET)"
+	@echo "$(CYAN)Check the profiles/ directory for results$(RESET)"
+
+# ═══════════════════════════════════════════════════════════════════
+# JMH Profiling Integration
+# ═══════════════════════════════════════════════════════════════════
+
+# Run JMH with built-in profilers
+jmh-profile-gc: jmh-build
+	@echo "$(YELLOW)Running JMH with GC profiler...$(RESET)"
+	@java -jar $(BUILD_DIR)/benchmarks.jar -prof gc
+
+jmh-profile-stack: jmh-build
+	@echo "$(YELLOW)Running JMH with stack profiler...$(RESET)"
+	@java -jar $(BUILD_DIR)/benchmarks.jar -prof stack
+
+jmh-profile-perf: jmh-build
+	@echo "$(YELLOW)Running JMH with perf profiler (Linux only)...$(RESET)"
+	@java -jar $(BUILD_DIR)/benchmarks.jar -prof perfnorm
+
+jmh-profile-async: jmh-build
+	@echo "$(YELLOW)Running JMH with async-profiler...$(RESET)"
+	@mkdir -p profiles/jmh
+	@java -jar $(BUILD_DIR)/benchmarks.jar -prof async:output=flamegraph;dir=profiles/jmh
 
 # Clean compiled files
 clean:
@@ -177,6 +482,8 @@ clean:
 clean-all:
 	@echo "$(RED)▶ Removing all generated files and directories...$(RESET)"
 	@rm -rf $(BUILD_DIR)
+	@rm -rf profiles
+	@rm -rf reports
 	@echo "$(GREEN)✓ Deep clean complete!$(RESET)"
 
 # ═══════════════════════════════════════════════════════════════════
@@ -243,4 +550,43 @@ jmh-all: jmh-build
 	@echo ""
 	@echo "$(GREEN)✓ All benchmarks complete!$(RESET)"
 	@echo "$(CYAN)Results saved to:$(RESET) reports/jmh-results.json"
+	@echo ""
+
+# ═══════════════════════════════════════════════════════════════════
+# Optimization Verification Target
+# ═══════════════════════════════════════════════════════════════════
+
+# Run benchmarks with detailed profiling to verify optimizations
+bench-profile-compare: build
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)╔═══════════════════════════════════════════════════════════════════╗$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)║  Benchmark with Optimization Analysis - 10M & 100M rows          ║$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)╚═══════════════════════════════════════════════════════════════════╝$(RESET)"
+	@echo ""
+	@mkdir -p profiles
+	@echo "$(CYAN)$(BOLD)━━━ Phase 1: 10M Row Benchmark with GC Profiling ━━━$(RESET)"
+	@echo ""
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-10m.txt" \
+		-Dexec.jvmArgs="-Xlog:gc*:file=profiles/gc-10m.log:time,level,tags -XX:+UnlockDiagnosticVMOptions"
+	@echo ""
+	@echo "$(CYAN)$(BOLD)━━━ Phase 2: 100M Row Benchmark with GC Profiling ━━━$(RESET)"
+	@echo ""
+	@mvn exec:java \
+		-Dexec.args="../data/measurements-100m.txt" \
+		-Dexec.jvmArgs="-Xlog:gc*:file=profiles/gc-100m.log:time,level,tags -XX:+UnlockDiagnosticVMOptions"
+	@echo ""
+	@echo "$(GREEN)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(GREEN)$(BOLD)  📊 GC ANALYSIS SUMMARY$(RESET)"
+	@echo "$(GREEN)$(BOLD)═══════════════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@echo "$(YELLOW)10M Rows - GC Statistics:$(RESET)"
+	@grep -E "GC\([0-9]+\)" profiles/gc-10m.log | tail -10 || echo "See profiles/gc-10m.log for details"
+	@echo ""
+	@echo "$(YELLOW)100M Rows - GC Statistics:$(RESET)"
+	@grep -E "GC\([0-9]+\)" profiles/gc-100m.log | tail -10 || echo "See profiles/gc-100m.log for details"
+	@echo ""
+	@echo "$(GREEN)✓ Profile logs saved:$(RESET)"
+	@echo "  • $(CYAN)profiles/gc-10m.log$(RESET)"
+	@echo "  • $(CYAN)profiles/gc-100m.log$(RESET)"
 	@echo ""
