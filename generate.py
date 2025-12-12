@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from multiprocessing import Value, Lock, Manager
 from multiprocessing.managers import DictProxy
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 
@@ -110,7 +111,7 @@ class FileGenerator:
         temp_folder: str,
         num_workers: int,
         monitor_threshold: int = 5_000_000,
-        results_path: str | None = None,
+        results_path: Optional[str] = None,
         worker_batch_size: int = 200_000,
     ) -> None:
         self.num_rows = num_rows
