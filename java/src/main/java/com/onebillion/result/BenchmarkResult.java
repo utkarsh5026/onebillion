@@ -2,6 +2,7 @@ package com.onebillion.result;
 
 import static com.onebillion.result.Color.*;
 
+import java.util.Comparator;
 import java.util.List;
 import org.jetbrains.annotations.NotNull;
 
@@ -49,30 +50,22 @@ public class BenchmarkResult {
       System.out.println("No results to display");
     }
 
-    BenchmarkResult fastest = null;
-    for (var result : results) {
-      if (result.success && (fastest == null || result.isFasterThan(fastest))) {
-        fastest = result;
-      }
-    }
+    BenchmarkResult fastest =
+        results.stream()
+            .filter(r -> r.success)
+            .min(Comparator.comparingLong(r -> r.executionTimeMs))
+            .orElse(null);
+
     printResultsComparison(results, fastest);
 
-    int successfulResults = 0;
-    for (BenchmarkResult r : results) {
-      if (r.success) successfulResults++;
-    }
+    long successfulResults = results.stream().filter(r -> r.success).count();
 
     if (successfulResults > 1 && fastest != null) {
       printSuccessStats(results, fastest);
     }
 
-    boolean hasInvalidResults = false;
-    for (BenchmarkResult r : results) {
-      if (r.success && r.validation != null && !r.validation.isValid) {
-        hasInvalidResults = true;
-        break;
-      }
-    }
+    var hasInvalidResults =
+        results.stream().anyMatch(r -> r.success && r.validation != null && !r.validation.isValid);
 
     if (hasInvalidResults) {
       printInvalidResults(results);
@@ -166,11 +159,11 @@ public class BenchmarkResult {
             result.validation.extraStations);
 
         if (!result.validation.errors.isEmpty()) {
-          int errorsToShow = Math.min(20, result.validation.errors.size());
-          System.out.printf("  Showing first %d errors:%n", errorsToShow);
-          for (int i = 0; i < errorsToShow; i++) {
-            System.out.println("    " + result.validation.errors.get(i));
-          }
+          var errorsToShow = Math.min(20, result.validation.errors.size());
+          result.validation.errors.stream()
+              .limit(errorsToShow)
+              .forEach(err -> System.out.println("    " + err));
+
           if (result.validation.errors.size() > errorsToShow) {
             System.out.printf(
                 "    ... and %d more errors%n", result.validation.errors.size() - errorsToShow);
@@ -188,9 +181,5 @@ public class BenchmarkResult {
     } else {
       System.out.printf("%s✗ Failed: %s%s%n%n", Color.COLOR_RED, error.getMessage(), COLOR_RESET);
     }
-  }
-
-  public boolean isFasterThan(BenchmarkResult other) {
-    return this.executionTimeMs < other.executionTimeMs;
   }
 }

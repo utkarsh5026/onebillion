@@ -3,10 +3,12 @@ package com.onebillion.result;
 import com.onebillion.strategies.StationResult;
 import java.io.File;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
 
 public class ResultChecker {
 
@@ -33,39 +35,37 @@ public class ResultChecker {
       return validation.addError("Error reading expected results file: " + e.getMessage());
     }
 
-    Map<String, StationResult> actualMap = new HashMap<>();
-    for (StationResult result : actualResults) {
-      actualMap.put(result.getStationName(), result);
-    }
+    Map<String, StationResult> actualMap =
+        actualResults.stream()
+            .collect(Collectors.toMap(StationResult::getStationName, Function.identity()));
 
     validation.totalStations = expectedResults.size();
     validation.isValid = true;
 
-    for (Map.Entry<String, ParsedResult> entry : expectedResults.entrySet()) {
-      String stationName = entry.getKey();
-      ParsedResult expected = entry.getValue();
+    expectedResults.forEach(
+        (stationName, expected) -> {
+          if (!actualMap.containsKey(stationName)) {
+            validation.missingStations++;
+            validation.addError("Missing station: " + stationName);
+            return;
+          }
 
-      if (!actualMap.containsKey(stationName)) {
-        validation.missingStations++;
-        validation.addError("Missing station: " + stationName);
-        continue;
-      }
+          var actual = actualMap.get(stationName);
+          if (!compareResults(stationName, expected, actual, validation)) {
+            validation.mismatchedStations++;
+            validation.isValid = false;
+          } else {
+            validation.matchedStations++;
+          }
+        });
 
-      StationResult actual = actualMap.get(stationName);
-      if (!compareResults(stationName, expected, actual, validation)) {
-        validation.mismatchedStations++;
-        validation.isValid = false;
-      } else {
-        validation.matchedStations++;
-      }
-    }
-
-    for (String stationName : actualMap.keySet()) {
-      if (!expectedResults.containsKey(stationName)) {
-        validation.extraStations++;
-        validation.addError("Extra station not in expected results: " + stationName);
-      }
-    }
+    actualMap.keySet().stream()
+        .filter(station -> !expectedResults.containsKey(station))
+        .forEach(
+            stationName -> {
+              validation.extraStations++;
+              validation.addError("Extra station not in expected results: " + stationName);
+            });
 
     return validation;
   }
@@ -85,39 +85,42 @@ public class ResultChecker {
     boolean avgMatches = Math.abs(actualAvg - expected.avg()) <= TOLERANCE;
 
     if (!minMatches || !maxMatches || !avgMatches) {
-      StringBuilder errorMsg = new StringBuilder(stationName).append(": ");
+      var errs = new StringBuilder(stationName).append(": ");
 
       if (!minMatches) {
-        errorMsg.append(
-            String.format("min(expected=%.1f, actual=%.1f)", expected.min(), actualMin));
+        errs.append(String.format("min(expected=%.1f, actual=%.1f)", expected.min(), actualMin));
       }
       if (!maxMatches) {
-        if (!minMatches) errorMsg.append(", ");
-        errorMsg.append(
-            String.format("max(expected=%.1f, actual=%.1f)", expected.max(), actualMax));
+        if (!minMatches) errs.append(", ");
+        errs.append(String.format("max(expected=%.1f, actual=%.1f)", expected.max(), actualMax));
       }
       if (!avgMatches) {
-        if (!minMatches || !maxMatches) errorMsg.append(", ");
-        errorMsg.append(
-            String.format("avg(expected=%.1f, actual=%.1f)", expected.avg(), actualAvg));
+        if (!minMatches || !maxMatches) errs.append(", ");
+        errs.append(String.format("avg(expected=%.1f, actual=%.1f)", expected.avg(), actualAvg));
       }
 
-      validation.errors.add(errorMsg.toString());
+      validation.errors.add(errs.toString());
       return false;
     }
 
     return true;
   }
 
-  private static String getExpectedResultsFile(String dataFilePath) {
+  private static @Nullable String getExpectedResultsFile(String dataFilePath) {
     var fileName = new File(dataFilePath).getName();
     if (fileName.contains("100k") || fileName.contains("100000")) {
       return "../results/results-100k.csv";
-    } else if (fileName.contains("1m") || fileName.contains("1000000")) {
+    }
+
+    if (fileName.contains("1m") || fileName.contains("1000000")) {
       return "../results/results-1m.csv";
-    } else if (fileName.contains("10m") || fileName.contains("10000000")) {
+    }
+
+    if (fileName.contains("10m") || fileName.contains("10000000")) {
       return "../results/results-10m.csv";
-    } else if (fileName.contains("100m") || fileName.contains("100000000")) {
+    }
+
+    if (fileName.contains("100m") || fileName.contains("100000000")) {
       return "../results/results-100m.csv";
     }
     return null;
