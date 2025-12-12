@@ -1,16 +1,11 @@
 package com.onebillion;
 
-import static com.onebillion.result.Color.COLOR_BLUE;
-import static com.onebillion.result.Color.COLOR_BOLD;
-import static com.onebillion.result.Color.COLOR_CYAN;
-import static com.onebillion.result.Color.COLOR_RESET;
-import static com.onebillion.result.Color.COLOR_YELLOW;
+import static com.onebillion.result.Color.*;
 
 import com.onebillion.result.BenchmarkResult;
 import com.onebillion.result.StrategyRunner;
 import com.onebillion.strategies.BatchStrategy;
 import com.onebillion.strategies.MCMPArenaStrategy;
-import com.onebillion.strategies.MCMPOptimizedStrategy;
 import com.onebillion.strategies.MCMPStrategy;
 import com.onebillion.strategies.Strategy;
 import java.io.File;
@@ -46,7 +41,7 @@ public class Main {
         List.of(
             new StrategyWrapper("MCMP Strategy", new MCMPStrategy()),
             new StrategyWrapper("MCMP Arena", new MCMPArenaStrategy()),
-            new StrategyWrapper("MCMP Hash probing", new MCMPOptimizedStrategy()),
+            // new StrategyWrapper("MCMP Hash probing", new MCMPOptimizedStrategy()),
             new StrategyWrapper("Batch Strategy", new BatchStrategy()));
 
     List<BenchmarkResult> results = new ArrayList<>();
