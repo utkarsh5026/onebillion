@@ -1,14 +1,15 @@
 package com.onebillion.strategies;
 
+import com.onebillion.result.Color;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 /**
@@ -64,22 +65,31 @@ abstract class ChunkReadStrategy {
             .toList();
 
     int totalRowsRead = results.stream().mapToInt(ChunkResult::rowCount).sum();
-    System.out.println("Read " + totalRowsRead + " rows");
+    System.out.println(
+        Color.COLOR_CYAN
+            + "Read "
+            + Color.COLOR_BOLD
+            + totalRowsRead
+            + Color.COLOR_RESET
+            + Color.COLOR_CYAN
+            + " rows"
+            + Color.COLOR_RESET);
 
     var resultMaps = results.stream().map(ChunkResult::results).toList();
     return mergeMaps(resultMaps).values().stream().toList();
   }
 
   private Map<String, StationResult> mergeMaps(List<Map<String, StationResult>> maps) {
-    Map<String, StationResult> merged = new HashMap<>();
-    for (Map<String, StationResult> map : maps) {
-      for (Map.Entry<String, StationResult> entry : map.entrySet()) {
-        merged
-            .computeIfAbsent(entry.getKey(), k -> new StationResult(entry.getValue().stationName))
-            .merge(entry.getValue());
-      }
-    }
-    return merged;
+    return maps.stream()
+        .flatMap(map -> map.entrySet().stream())
+        .collect(
+            Collectors.toMap(
+                Map.Entry::getKey,
+                Map.Entry::getValue,
+                (existing, newResult) -> {
+                  existing.merge(newResult);
+                  return existing;
+                }));
   }
 
   abstract ChunkResult processChunk(Chunk chunk) throws IOException;
