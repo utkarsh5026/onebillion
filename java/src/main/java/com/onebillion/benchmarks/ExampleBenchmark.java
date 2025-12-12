@@ -14,9 +14,7 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
 /**
  * Example JMH Benchmark demonstrating various benchmarking patterns
  *
- * <p>
- * This shows: - Different benchmark modes - State management - Parameter
- * testing -
+ * <p>This shows: - Different benchmark modes - State management - Parameter testing -
  * Setup/TearDown methods
  */
 @State(Scope.Thread)
@@ -60,7 +58,7 @@ public class ExampleBenchmark {
   // ═══════════════════════════════════════════════════════════════════
   @State(Scope.Benchmark)
   public static class ParamState {
-    @Param({ "100", "1000", "10000" })
+    @Param({"100", "1000", "10000"})
     public int size;
 
     public List<String> data;
@@ -80,7 +78,8 @@ public class ExampleBenchmark {
   @Warmup(iterations = 1)
   @Measurement(iterations = 2)
   public void parameterizedExample(ParamState state, Blackhole blackhole) {
-    List<String> filtered = state.data.stream().filter(s -> s.startsWith("item")).collect(Collectors.toList());
+    List<String> filtered =
+        state.data.stream().filter(s -> s.startsWith("item")).collect(Collectors.toList());
     blackhole.consume(filtered);
   }
 
