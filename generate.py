@@ -165,6 +165,11 @@ class FileGenerator:
         self.__merge_temp_files(temp_files)
         self.__write_results_csv()
         self.__print_write_time(start_time)
+
+        with self.progress_lock:
+            actual_rows = self.progress_counter.value
+        print(f"\nGenerated {actual_rows:,} rows")
+
         self.__print_final_stats(start_time, merge_start)
 
         return processes
