@@ -1,14 +1,10 @@
 package com.onebillion;
 
-import static com.onebillion.result.Color.COLOR_BLUE;
-import static com.onebillion.result.Color.COLOR_BOLD;
-import static com.onebillion.result.Color.COLOR_CYAN;
-import static com.onebillion.result.Color.COLOR_RESET;
-import static com.onebillion.result.Color.COLOR_YELLOW;
+import static com.onebillion.result.Color.*;
 
 import com.onebillion.result.BenchmarkResult;
 import com.onebillion.result.StrategyRunner;
-import com.onebillion.strategies.MCMPArenaStrategy;
+import com.onebillion.strategies.ReadingStrategies.*;
 import com.onebillion.strategies.Strategy;
 import java.io.File;
 import java.nio.file.Files;
@@ -41,11 +37,24 @@ public class Main {
 
     List<StrategyWrapper> strategies =
         List.of(
-            // new StrategyWrapper("MCMP Strategy", new MCMPStrategy()),
-            new StrategyWrapper("MCMP Arena", new MCMPArenaStrategy())
-            // new StrategyWrapper("MCMP Hash probing", new MCMPOptimizedStrategy()),
-            // new StrategyWrapper("Batch Strategy", new BatchStrategy())
-            );
+            // StandardBufferedReader combinations
+            new StrategyWrapper("Standard-HashTable", new StandardBufferedHashTableStrategy()),
+            new StrategyWrapper(
+                "Standard-LinearProbing", new StandardBufferedLinearProbingStrategy()),
+
+            // MemoryMappedBufferedReader combinations
+            new StrategyWrapper("MemoryMapped-HashTable", new MemoryMappedHashTableStrategy()),
+            new StrategyWrapper(
+                "MemoryMapped-LinearProbing", new MemoryMappedLinearProbingStrategy()),
+
+            // ByteBufferedReader combinations
+            new StrategyWrapper("ByteBuffered-HashTable", new ByteBufferedHashTableStrategy()),
+            new StrategyWrapper(
+                "ByteBuffered-LinearProbing", new ByteBufferedLinearProbingStrategy()),
+
+            // ArenaReader combinations
+            new StrategyWrapper("Arena-HashTable", new ArenaHashTableStrategy()),
+            new StrategyWrapper("Arena-LinearProbing", new ArenaLinearProbingStrategy()));
 
     List<BenchmarkResult> results = new ArrayList<>();
 
