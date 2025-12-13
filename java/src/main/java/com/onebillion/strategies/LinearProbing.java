@@ -1,17 +1,14 @@
 package com.onebillion.strategies;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import jdk.incubator.vector.ByteVector;
-import jdk.incubator.vector.VectorSpecies;
 import org.jetbrains.annotations.NotNull;
 
-public class LinearProbing {
-  private static final VectorSpecies<Byte> SPECIES = ByteVector.SPECIES_128;
-
+public class LinearProbing implements LineReader {
   private final int mask;
   private final StationTableItem[] table;
   private int occupied;
@@ -22,42 +19,40 @@ public class LinearProbing {
     this.occupied = 0;
   }
 
-  /**
-   * SIMD-optimized byte array comparison using Vector API. Compares 16 bytes at a time instead of
-   * byte-by-byte.
-   */
-  private static boolean vectorEquals(byte @NotNull [] a, byte @NotNull [] b) {
-    if (a.length != b.length) return false;
+  private static boolean arrayEquals(byte[] data, byte @NotNull [] array, int length, int offset) {
+    if (length != array.length) return false;
 
-    int len = a.length;
-    int i = 0;
-
-    int upperBound = SPECIES.loopBound(len);
-    for (; i < upperBound; i += SPECIES.length()) {
-      var va = ByteVector.fromArray(SPECIES, a, i);
-      var vb = ByteVector.fromArray(SPECIES, b, i);
-      if (!va.eq(vb).allTrue()) {
-        return false;
-      }
+    for (int i = 0; i < length; i++) {
+      if (data[offset + i] != array[i]) return false;
     }
-
-    for (; i < len; i++) {
-      if (a[i] != b[i]) return false;
-    }
-
     return true;
   }
 
-  public void probe(byte[] name, int hash, long temp) {
+  public void parseAndProbe(byte[] nameByte, int nameLen) {
+    int semicolonPos = -1;
+    for (int i = 0; i < nameLen; i++) {
+      if (nameByte[i] == ';') {
+        semicolonPos = i;
+        break;
+      }
+    }
+
+    if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
+    int hash = hashFnvDirect(nameByte, semicolonPos);
+
+    long temp = getTemp(semicolonPos, nameLen, nameByte, nameLen);
+    probe(nameByte, 0, semicolonPos, hash, temp);
+  }
+
+  public void probe(byte[] data, int nameOffset, int nameLen, int hash, long temp) {
     int index = hash & mask;
     while (true) {
       var item = table[index];
       if (item == null) {
-        table[index] = new StationTableItem(name, temp, hash);
-        this.occupied++;
+        createNewItem(data, nameOffset, nameLen, hash, temp, index);
         return;
       }
-      if (item.hash == hash && vectorEquals(item.name, name)) {
+      if (item.hash == hash && arrayEquals(data, item.name, nameLen, nameOffset)) {
         item.update(temp);
         return;
       }
@@ -65,14 +60,33 @@ public class LinearProbing {
     }
   }
 
-  public Map<String, StationResult> toMap() {
+  private void createNewItem(
+      byte[] data, int nameOffset, int nameLen, int hash, long temp, int index) {
+    byte[] name = new byte[nameLen];
+    System.arraycopy(data, nameOffset, name, 0, nameLen);
+    table[index] = new StationTableItem(name, temp, hash);
+    this.occupied++;
+  }
+
+  private int hashFnvDirect(byte[] nameData, int length) {
+    int hash = 0x811c9dc5;
+    for (int i = 0; i < length; i++) {
+      byte b = nameData[i];
+      hash ^= (b & 0xff);
+      hash *= 0x01000193;
+    }
+    return hash;
+  }
+
+  @Override
+  public Map<String, StationResult> collect() {
     return Arrays.stream(table)
         .filter(Objects::nonNull)
         .collect(
             Collectors.toMap(
-                item -> new String(item.name),
+                item -> new String(item.name, StandardCharsets.UTF_8),
                 item -> {
-                  var result = new StationResult(new String(item.name));
+                  var result = new StationResult(new String(item.name, StandardCharsets.UTF_8));
                   result.sum = item.sum;
                   result.count = item.count;
                   result.max = item.maximum;
@@ -81,6 +95,11 @@ public class LinearProbing {
                 },
                 (a, b) -> a,
                 () -> new HashMap<>(occupied)));
+  }
+
+  @Override
+  public void readLine(byte[] lineBytes, int end) {
+    parseAndProbe(lineBytes, end);
   }
 
   static class StationTableItem {

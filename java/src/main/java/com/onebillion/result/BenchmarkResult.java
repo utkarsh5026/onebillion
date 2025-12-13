@@ -33,17 +33,10 @@ public class BenchmarkResult {
   }
 
   public static void printSummary(List<BenchmarkResult> results) {
-    System.out.println(
-        COLOR_BOLD
-            + COLOR_CYAN
-            + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            + COLOR_RESET);
+    System.out.println();
+    System.out.println(COLOR_BOLD + COLOR_CYAN + "=".repeat(90) + COLOR_RESET);
     System.out.println(COLOR_BOLD + COLOR_CYAN + "  PERFORMANCE SUMMARY" + COLOR_RESET);
-    System.out.println(
-        COLOR_BOLD
-            + COLOR_CYAN
-            + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            + COLOR_RESET);
+    System.out.println(COLOR_BOLD + COLOR_CYAN + "=".repeat(90) + COLOR_RESET);
     System.out.println();
 
     if (results.isEmpty()) {
@@ -72,73 +65,84 @@ public class BenchmarkResult {
     }
 
     System.out.println();
-    System.out.println(
-        COLOR_BOLD
-            + COLOR_CYAN
-            + "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            + COLOR_RESET);
+    System.out.println(COLOR_BOLD + COLOR_CYAN + "=".repeat(90) + COLOR_RESET);
   }
 
   private static void printResultsComparison(
       @NotNull List<BenchmarkResult> results, BenchmarkResult fastest) {
+    // Print table header
+    System.out.printf(
+        "%s%-32s | %10s | %8s | %8s | %s%s%n",
+        COLOR_BOLD, "Strategy", "Time", "Memory", "Results", "Status", COLOR_RESET);
+    System.out.println("-".repeat(90));
+
     for (var r : results) {
       if (!r.success) {
         System.out.printf(
-            "%s%-20s%s  %s%10s%s  %s✗ FAILED: %s%s%n",
+            "%s%-32s%s | %10s | %8s | %8s | %sFAILED: %s%s%n",
             COLOR_RED,
             r.strategyName,
             COLOR_RESET,
-            COLOR_BOLD,
             "---",
-            COLOR_RESET,
+            "---",
+            "---",
             COLOR_RED,
-            r.error.getMessage(),
+            truncateError(r.error.getMessage(), 30),
             COLOR_RESET);
         continue;
       }
 
       var isFastest = fastest != null && r.strategyName.equals(fastest.strategyName);
-      String badge = isFastest ? COLOR_GREEN + " ★ FASTEST" + COLOR_RESET : "";
 
-      String validationBadge = "";
+      String statusBadge = "";
+      if (isFastest) {
+        statusBadge += COLOR_GREEN + "[FASTEST] " + COLOR_RESET;
+      }
       if (r.validation != null) {
         if (r.validation.isValid) {
-          validationBadge = COLOR_GREEN + " ✓ VALID" + COLOR_RESET;
+          statusBadge += COLOR_GREEN + "[VALID]" + COLOR_RESET;
         } else {
-          validationBadge = COLOR_RED + " ✗ INVALID" + COLOR_RESET;
+          statusBadge += COLOR_RED + "[INVALID]" + COLOR_RESET;
         }
       }
 
       System.out.printf(
-          "%s%-20s%s  %s%10s%s  │  %sMem: %3d MB%s  │  %sResults: %d%s%s%s%n",
+          "%s%-32s%s | %s%10s%s | %8s | %8d | %s%n",
           isFastest ? COLOR_GREEN : COLOR_RESET,
           r.strategyName,
           COLOR_RESET,
           COLOR_BOLD,
           formatDuration(r.executionTimeMs),
           COLOR_RESET,
-          COLOR_BLUE,
-          r.memoryUsedMB,
-          COLOR_RESET,
-          COLOR_YELLOW,
+          r.memoryUsedMB + " MB",
           r.resultCount,
-          COLOR_RESET,
-          badge,
-          validationBadge);
+          statusBadge);
     }
+  }
+
+  private static String truncateError(String message, int maxLength) {
+    if (message.length() <= maxLength) return message;
+    return message.substring(0, maxLength - 3) + "...";
   }
 
   private static void printSuccessStats(
       @NotNull List<BenchmarkResult> results, @NotNull BenchmarkResult fastest) {
     System.out.println();
-    System.out.println(COLOR_BOLD + "Speedup vs " + fastest.strategyName + ":" + COLOR_RESET);
+    System.out.println(
+        COLOR_BOLD + "Performance Comparison (vs " + fastest.strategyName + "):" + COLOR_RESET);
+    System.out.println("-".repeat(60));
     for (BenchmarkResult r : results) {
       if (r.success && !r.strategyName.equals(fastest.strategyName)) {
         var ratio = (double) r.executionTimeMs / (double) fastest.executionTimeMs;
         var speedIndicator = ratio > 2.0 ? COLOR_RED : ratio > 1.5 ? COLOR_YELLOW : COLOR_GREEN;
+
+        // Create bar chart
+        int barLength = Math.min((int) (ratio * 10), 50);
+        String bar = "█".repeat(barLength);
+
         System.out.printf(
-            "  %s%-20s%s  %s%.2fx slower%s%n",
-            COLOR_RESET, r.strategyName, COLOR_RESET, speedIndicator, ratio, COLOR_RESET);
+            "  %-32s %s%.2fx%s %s%s%n",
+            r.strategyName, speedIndicator, ratio, COLOR_RESET, speedIndicator, bar + COLOR_RESET);
       }
     }
   }
