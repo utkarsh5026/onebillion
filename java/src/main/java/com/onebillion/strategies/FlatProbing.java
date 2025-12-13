@@ -25,51 +25,55 @@ public class FlatProbing implements LineReader {
     this.counts = new int[tableSize];
   }
 
-  private static boolean arrayEquals(byte[] data, byte[] storedKey, int length) {
+  private static boolean arrayEquals(byte[] data, int offset, byte[] storedKey, int length) {
     if (storedKey.length != length) return false;
     for (int i = 0; i < length; i++) {
-      if (data[i] != storedKey[i]) return false;
+      if (data[offset + i] != storedKey[i]) return false;
     }
     return true;
   }
 
   @Override
-  public void readLine(byte[] lineBytes, int end) {
-    int semicolonPos = getSemiColonIndex(lineBytes, end);
+  public void readLine(byte[] lineBytes, int start, int end) {
+    int semicolonPos = getSemiColonIndex(lineBytes, start, end);
     if (semicolonPos == -1) {
       throw new IllegalArgumentException("Invalid input: no semicolon found");
     }
 
-    int hash = HashUtils.hashFnvDirect(lineBytes, semicolonPos);
-    long temp = getTemp(semicolonPos, end, lineBytes, end);
-    probe(lineBytes, semicolonPos, hash, temp);
+    int nameLen = semicolonPos - start;
+    int hash = HashUtils.hashFnvDirect(lineBytes, start, nameLen);
+    long temp = getTemp(semicolonPos, lineBytes, end);
+    probe(lineBytes, start, nameLen, hash, temp);
   }
 
-  private void probe(byte[] data, int nameOffset, int hash, long temp) {
+  private void probe(byte[] data, int nameOffset, int nameLen, int hash, long temp) {
     int index = hash & mask;
 
     while (true) {
       if (keys[index] == null) {
-        insertNew(data, nameOffset, hash, temp, index);
+        insertNew(data, nameOffset, nameLen, hash, temp, index);
         return;
       }
 
-      if (hashes[index] == hash && arrayEquals(data, keys[index], nameOffset)) {
-        if (temp < mins[index]) mins[index] = temp;
-        if (temp > maxs[index]) maxs[index] = temp;
-        sums[index] += temp;
-        counts[index]++;
+      if (hashes[index] == hash && arrayEquals(data, nameOffset, keys[index], nameLen)) {
+        updateExisting(index, temp);
         return;
       }
 
-      // Collision! Move to next slot (Linear Probing)
       index = (index + 1) & mask;
     }
   }
 
-  private void insertNew(byte[] data, int nameOffset, int hash, long temp, int index) {
-    byte[] nameBytes = new byte[nameOffset];
-    System.arraycopy(data, 0, nameBytes, 0, nameOffset);
+  private void updateExisting(int index, long temp) {
+    if (temp < mins[index]) mins[index] = temp;
+    if (temp > maxs[index]) maxs[index] = temp;
+    sums[index] += temp;
+    counts[index]++;
+  }
+
+  private void insertNew(byte[] data, int nameOffset, int nameLen, int hash, long temp, int index) {
+    byte[] nameBytes = new byte[nameLen];
+    System.arraycopy(data, nameOffset, nameBytes, 0, nameLen);
     keys[index] = nameBytes;
     hashes[index] = hash;
     mins[index] = temp;

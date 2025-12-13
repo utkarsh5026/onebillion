@@ -28,22 +28,6 @@ public class LinearProbing implements LineReader {
     return true;
   }
 
-  public void parseAndProbe(byte[] nameByte, int nameLen) {
-    int semicolonPos = -1;
-    for (int i = 0; i < nameLen; i++) {
-      if (nameByte[i] == ';') {
-        semicolonPos = i;
-        break;
-      }
-    }
-
-    if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
-    int hash = HashUtils.hashFnvDirect(nameByte, semicolonPos);
-
-    long temp = getTemp(semicolonPos, nameLen, nameByte, nameLen);
-    probe(nameByte, 0, semicolonPos, hash, temp);
-  }
-
   public void probe(byte[] data, int nameOffset, int nameLen, int hash, long temp) {
     int index = hash & mask;
     while (true) {
@@ -88,8 +72,15 @@ public class LinearProbing implements LineReader {
   }
 
   @Override
-  public void readLine(byte[] lineBytes, int end) {
-    parseAndProbe(lineBytes, end);
+  public void readLine(byte[] lineBytes, int start, int end) {
+    int semicolonPos = getSemiColonIndex(lineBytes, start, end);
+    if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
+
+    int nameLen = semicolonPos - start;
+    int hash = HashUtils.hashFnvDirect(lineBytes, start, nameLen);
+
+    long temp = getTemp(semicolonPos, lineBytes, end);
+    probe(lineBytes, start, nameLen, hash, temp);
   }
 
   static class StationTableItem {
