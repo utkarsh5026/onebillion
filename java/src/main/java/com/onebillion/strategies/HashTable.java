@@ -1,5 +1,6 @@
 package com.onebillion.strategies;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -15,7 +16,7 @@ public class HashTable implements LineReader {
   public void readLine(byte[] lineBytes, int end) {
     for (int i = 0; i < end; i++) {
       if (lineBytes[i] == ';') {
-        var stationName = new String(lineBytes, 0, i);
+        var stationName = new String(lineBytes, 0, i, StandardCharsets.UTF_8);
         long measurement = getTemp(i, end, lineBytes, end);
         StationResult result =
             table.computeIfAbsent(stationName, _ -> new StationResult(stationName));

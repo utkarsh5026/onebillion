@@ -1,5 +1,6 @@
 package com.onebillion.strategies;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -7,7 +8,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 
-class LinearProbing implements LineReader {
+public class LinearProbing implements LineReader {
   private final int mask;
   private final StationTableItem[] table;
   private int occupied;
@@ -39,22 +40,7 @@ class LinearProbing implements LineReader {
     if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
     int hash = hashFnvDirect(nameByte, semicolonPos);
 
-    boolean negative = false;
-    long temp = 0;
-
-    for (int i = semicolonPos + 1; i < nameLen; i++) {
-      byte b = nameByte[i];
-      if (b == '-') {
-        negative = true;
-      } else if (b != '.') {
-        temp = temp * 10 + (b - '0');
-      }
-    }
-
-    if (negative) {
-      temp = -temp;
-    }
-
+    long temp = getTemp(semicolonPos, nameLen, nameByte, nameLen);
     probe(nameByte, 0, semicolonPos, hash, temp);
   }
 
@@ -98,9 +84,9 @@ class LinearProbing implements LineReader {
         .filter(Objects::nonNull)
         .collect(
             Collectors.toMap(
-                item -> new String(item.name),
+                item -> new String(item.name, StandardCharsets.UTF_8),
                 item -> {
-                  var result = new StationResult(new String(item.name));
+                  var result = new StationResult(new String(item.name, StandardCharsets.UTF_8));
                   result.sum = item.sum;
                   result.count = item.count;
                   result.max = item.maximum;

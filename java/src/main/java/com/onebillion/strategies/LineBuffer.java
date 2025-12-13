@@ -18,11 +18,11 @@ class LineBuffer {
 
   public void process(byte b) {
     if (b == '\n' || b == '\r') {
-      if (reader != null) {
+      if (reader != null && position > 0) {
         reader.readLine(buffer, position);
+        filled++;
       }
       position = 0;
-      filled++;
       return;
     }
 

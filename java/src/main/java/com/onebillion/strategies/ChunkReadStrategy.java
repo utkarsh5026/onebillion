@@ -16,6 +16,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 
@@ -42,7 +43,8 @@ public class ChunkReadStrategy {
     this.filepath = null;
   }
 
-  public List<StationResult> runPlan(ChunkReader chunkReader, LineReader lineReader)
+  public List<StationResult> runPlan(
+      ChunkReader chunkReader, Supplier<LineReader> lineReaderSupplier)
       throws IOException, ExecutionException, InterruptedException {
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
       var futures =
@@ -50,7 +52,9 @@ public class ChunkReadStrategy {
               .map(
                   chunk ->
                       executor.submit(
-                          () -> chunkReader.processChunk(chunk.path(), chunk, lineReader)))
+                          () ->
+                              chunkReader.processChunk(
+                                  chunk.path(), chunk, lineReaderSupplier.get())))
               .toList();
       return createResults(futures);
     }
@@ -76,25 +80,21 @@ public class ChunkReadStrategy {
       long lastEnd = 0;
       for (int i = 0; i < PROCESSORS; i++) {
         long start = lastEnd;
-        long end = start + chunkSize;
+        long end = Math.min(start + chunkSize, fileSize);
 
-        while (end < fileSize) {
+        while (end < fileSize && raf.readByte() != '\n') {
           raf.seek(end + 1);
-          if (raf.readByte() == '\n') {
-            end = end + 1;
-            break;
-          }
           end++;
         }
 
-        lastEnd = end;
-        chunks.add(new Chunk(start, end, i == 0, i == PROCESSORS - 1, path));
+        lastEnd = end++; // Move past the newline for the next chunk's start
+        chunks.add(new Chunk(start, Math.min(fileSize, end), i == 0, i == PROCESSORS - 1, path));
       }
     }
     return chunks;
   }
 
-  protected List<StationResult> createResults(List<Future<ChunkResult>> futures) {
+  protected List<StationResult> createResults(@NotNull List<Future<ChunkResult>> futures) {
     var results =
         futures.stream()
             .map(
@@ -122,7 +122,7 @@ public class ChunkReadStrategy {
     return mergeMaps(resultMaps).values().stream().toList();
   }
 
-  private Map<String, StationResult> mergeMaps(List<Map<String, StationResult>> maps) {
+  private Map<String, StationResult> mergeMaps(@NotNull List<Map<String, StationResult>> maps) {
     return maps.stream()
         .flatMap(map -> map.entrySet().stream())
         .collect(
@@ -141,8 +141,7 @@ public class ChunkReadStrategy {
   }
 
   abstract static class NioBufferReader {
-    ChunkResult processChunk(Chunk chunk, LineReader reader, @NotNull ByteBuffer buffer)
-        throws IOException {
+    ChunkResult processChunk(Chunk chunk, LineReader reader, @NotNull ByteBuffer buffer) {
       var lineBuf = new LineBuffer(reader);
       while (buffer.hasRemaining()) {
         byte b = buffer.get();
@@ -155,15 +154,22 @@ public class ChunkReadStrategy {
   public static class StandardBufferedReader implements ChunkReader {
     @Override
     public ChunkResult processChunk(Path path, Chunk chunk, LineReader reader) throws IOException {
-      try (var buffReader = Files.newBufferedReader(path)) {
-        var buffer = new char[1024 * 1024];
+      try (var raf = new RandomAccessFile(path.toFile(), "r")) {
+        long size = chunk.end() - chunk.start();
+        raf.seek(chunk.start());
+        var buffer = new byte[(int) Math.min(size, 1024 * 1024)];
         var lineBuff = new LineBuffer(reader);
-        int bytesRead;
+        long totalRead = 0;
 
-        while ((bytesRead = buffReader.read(buffer)) != -1) {
+        while (totalRead < size) {
+          int toRead = (int) Math.min(buffer.length, size - totalRead);
+          int bytesRead = raf.read(buffer, 0, toRead);
+          if (bytesRead == -1) break;
+
           for (int i = 0; i < bytesRead; i++) {
-            lineBuff.process((byte) buffer[i]);
+            lineBuff.process(buffer[i]);
           }
+          totalRead += bytesRead;
         }
         return new ChunkResult(reader.collect(), lineBuff.getFilled());
       }
