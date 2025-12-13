@@ -46,8 +46,11 @@ help:
 	@echo "$(BOLD)Benchmarks (auto-generate + run):$(RESET)"
 	@echo "  $(GREEN)make benchmark$(RESET)        - Quick benchmark $(YELLOW)(1K rows, instant)$(RESET)"
 	@echo "  $(GREEN)make bench-small$(RESET)      - Small benchmark $(YELLOW)(10M rows, ~30s)$(RESET)"
+	@echo "  $(GREEN)make bench-small-simd$(RESET) - Small benchmark with SIMD $(YELLOW)(10M rows)$(RESET)"
 	@echo "  $(GREEN)make bench-large$(RESET)      - Large benchmark $(YELLOW)(100M rows, ~20min)$(RESET)"
+	@echo "  $(GREEN)make bench-large-simd$(RESET) - Large benchmark with SIMD $(YELLOW)(100M rows)$(RESET)"
 	@echo "  $(GREEN)make bench-billion$(RESET)    - Full 1B benchmark $(YELLOW)(1B rows, ~45min!)$(RESET)"
+	@echo "  $(GREEN)make bench-billion-simd$(RESET) - Full 1B benchmark with SIMD $(YELLOW)(1B rows)$(RESET)"
 	@echo ""
 	@echo "$(BOLD)Profiling & Performance Analysis (Easy Mode):$(RESET)"
 	@echo "  $(YELLOW)make profile$(RESET)          - $(BOLD)Run & show CPU+Memory+GC analysis (RECOMMENDED)$(RESET)"
@@ -148,6 +151,15 @@ bench-small: build
 	@echo ""
 	@java --add-modules jdk.incubator.vector -cp target/classes com.onebillion.Main ../data/measurements-10m.txt
 
+# Small benchmark with SIMD (10M rows)
+bench-small-simd: build
+	@echo ""
+	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(CYAN)$(BOLD)  Running Small Benchmark with SIMD (10M rows)$(RESET)"
+	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@java --add-modules jdk.incubator.vector -cp target/classes com.onebillion.Main --simd ../data/measurements-10m.txt
+
 # Medium benchmark (100M rows)
 bench-large: build
 	@echo ""
@@ -157,6 +169,14 @@ bench-large: build
 	@echo ""
 	@java --add-modules jdk.incubator.vector -cp target/classes com.onebillion.Main ../data/measurements-100m.txt
 
+# Medium benchmark with SIMD (100M rows)
+bench-large-simd: build
+	@echo ""
+	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(CYAN)$(BOLD)  Running Medium Benchmark with SIMD (100M rows)$(RESET)"
+	@echo "$(CYAN)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@java --add-modules jdk.incubator.vector -cp target/classes com.onebillion.Main --simd ../data/measurements-100m.txt
 
 # Billion row benchmark (full challenge!)
 bench-billion: build
@@ -166,6 +186,15 @@ bench-billion: build
 	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
 	@echo ""
 	@mvn exec:java -Dexec.args="../data/measurements-1b.txt"
+
+# Billion row benchmark with SIMD (full challenge!)
+bench-billion-simd: build
+	@echo ""
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)  Running BILLION ROW CHALLENGE with SIMD (1B rows)$(RESET)"
+	@echo "$(MAGENTA)$(BOLD)═══════════════════════════════════════════════════════════$(RESET)"
+	@echo ""
+	@mvn exec:java -Dexec.args="--simd ../data/measurements-1b.txt"
 
 # ═══════════════════════════════════════════════════════════════════
 # Profiling Targets - Easy Mode (Run + Analyze in One Command)
