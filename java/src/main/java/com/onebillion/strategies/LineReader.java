@@ -25,4 +25,13 @@ public interface LineReader {
 
     return temp;
   }
+
+  default int getSemiColonIndex(byte[] lineBytes, int end) {
+    for (int i = 0; i < end; i++) {
+      if (lineBytes[i] == ';') {
+        return i;
+      }
+    }
+    return -1;
+  }
 }

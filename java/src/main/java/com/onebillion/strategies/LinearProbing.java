@@ -38,7 +38,7 @@ public class LinearProbing implements LineReader {
     }
 
     if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
-    int hash = hashFnvDirect(nameByte, semicolonPos);
+    int hash = HashUtils.hashFnvDirect(nameByte, semicolonPos);
 
     long temp = getTemp(semicolonPos, nameLen, nameByte, nameLen);
     probe(nameByte, 0, semicolonPos, hash, temp);
@@ -66,16 +66,6 @@ public class LinearProbing implements LineReader {
     System.arraycopy(data, nameOffset, name, 0, nameLen);
     table[index] = new StationTableItem(name, temp, hash);
     this.occupied++;
-  }
-
-  private int hashFnvDirect(byte[] nameData, int length) {
-    int hash = 0x811c9dc5;
-    for (int i = 0; i < length; i++) {
-      byte b = nameData[i];
-      hash ^= (b & 0xff);
-      hash *= 0x01000193;
-    }
-    return hash;
   }
 
   @Override
