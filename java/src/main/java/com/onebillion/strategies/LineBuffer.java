@@ -16,6 +16,24 @@ class LineBuffer {
     this(DEFAULT_SIZE, reader);
   }
 
+  public void processBuffer(byte[] buf, int length) {
+    for (int i = 0; i < length; i++) {
+      byte b = buf[i];
+      if (b == '\n' || b == '\r') {
+        if (reader != null && position > 0) {
+          reader.readLine(buffer, position);
+          filled++;
+        }
+        position = 0;
+        continue;
+      }
+
+      if (position < buffer.length) {
+        buffer[position++] = b;
+      }
+    }
+  }
+
   public void process(byte b) {
     if (b == '\n' || b == '\r') {
       if (reader != null && position > 0) {

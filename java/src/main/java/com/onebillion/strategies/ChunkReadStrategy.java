@@ -32,6 +32,9 @@ public class ChunkReadStrategy {
   /** Number of parallel chunks to produce, based on available CPU PROCESSORS. */
   private static final int PROCESSORS = Runtime.getRuntime().availableProcessors();
 
+  /** Batch size for buffered reading operations. */
+  private static final int BATCH_SIZE = 8192; // 8KB batch size
+
   private final String filepath;
 
   public ChunkReadStrategy(String filePath) {
@@ -143,9 +146,12 @@ public class ChunkReadStrategy {
   abstract static class NioBufferReader {
     ChunkResult processChunk(Chunk chunk, LineReader reader, @NotNull ByteBuffer buffer) {
       var lineBuf = new LineBuffer(reader);
+      var batch = new byte[BATCH_SIZE];
+
       while (buffer.hasRemaining()) {
-        byte b = buffer.get();
-        lineBuf.process(b);
+        int toRead = Math.min(buffer.remaining(), batch.length);
+        buffer.get(batch, 0, toRead);
+        lineBuf.processBuffer(batch, toRead);
       }
       return new ChunkResult(reader.collect(), lineBuf.getFilled());
     }
@@ -166,9 +172,7 @@ public class ChunkReadStrategy {
           int bytesRead = raf.read(buffer, 0, toRead);
           if (bytesRead == -1) break;
 
-          for (int i = 0; i < bytesRead; i++) {
-            lineBuff.process(buffer[i]);
-          }
+          lineBuff.processBuffer(buffer, bytesRead);
           totalRead += bytesRead;
         }
         return new ChunkResult(reader.collect(), lineBuff.getFilled());
@@ -211,11 +215,16 @@ public class ChunkReadStrategy {
         long size = chunk.end() - chunk.start();
         var segment = channel.map(FileChannel.MapMode.READ_ONLY, chunk.start(), size, arena);
         var lineBuf = new LineBuffer(reader);
+        var batch = new byte[BATCH_SIZE];
         long pos = 0;
+
         while (pos < size) {
-          byte b = segment.get(ValueLayout.JAVA_BYTE, pos);
-          pos++;
-          lineBuf.process(b);
+          int toRead = (int) Math.min(batch.length, size - pos);
+          for (int i = 0; i < toRead; i++) {
+            batch[i] = segment.get(ValueLayout.JAVA_BYTE, pos + i);
+          }
+          lineBuf.processBuffer(batch, toRead);
+          pos += toRead;
         }
         return new ChunkResult(reader.collect(), lineBuf.getFilled());
       }
