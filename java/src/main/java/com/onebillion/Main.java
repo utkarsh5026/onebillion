@@ -1,5 +1,11 @@
 package com.onebillion;
 
+import static com.onebillion.result.Color.*;
+
+import com.onebillion.result.BenchmarkResult;
+import com.onebillion.result.StrategyRunner;
+import com.onebillion.strategies.*;
+import com.onebillion.strategies.ChunkReadStrategy.*;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -9,24 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.function.Supplier;
-
-import com.onebillion.result.BenchmarkResult;
-import static com.onebillion.result.Color.COLOR_BLUE;
-import static com.onebillion.result.Color.COLOR_BOLD;
-import static com.onebillion.result.Color.COLOR_CYAN;
-import static com.onebillion.result.Color.COLOR_RESET;
-import static com.onebillion.result.Color.COLOR_YELLOW;
-import com.onebillion.result.StrategyRunner;
-import com.onebillion.strategies.ChunkReadStrategy;
-import com.onebillion.strategies.ChunkReadStrategy.ArenaReader;
-import com.onebillion.strategies.ChunkReadStrategy.ByteBufferedReader;
-import com.onebillion.strategies.ChunkReadStrategy.ChunkReader;
-import com.onebillion.strategies.ChunkReadStrategy.MemoryMappedBufferedReader;
-import com.onebillion.strategies.ChunkReadStrategy.StandardBufferedReader;
-import com.onebillion.strategies.HashTable;
-import com.onebillion.strategies.LineReader;
-import com.onebillion.strategies.LinearProbing;
-import com.onebillion.strategies.Strategy;
 
 public class Main {
 
@@ -45,25 +33,46 @@ public class Main {
       System.out.println(COLOR_BLUE + "Created results directory" + COLOR_RESET);
     }
 
-    boolean printResults = args.length > 0 && args[0].equals("--print-results");
-    String[] fileArgs = printResults && args.length > 1
-        ? new String[] { args[1] }
-        : printResults ? new String[0] : args;
+    // Parse command line arguments
+    boolean useSIMD = false;
+    boolean printResults = false;
+    List<String> fileArgsList = new ArrayList<>();
+
+    for (var arg : args) {
+      switch (arg) {
+        case "--simd" -> useSIMD = true;
+        case "--print-results" -> printResults = true;
+        default -> fileArgsList.add(arg);
+      }
+    }
+
+    LineBuffer.setUseSIMD(useSIMD);
+    if (useSIMD) {
+      System.out.println(COLOR_GREEN + "✓ SIMD mode enabled" + COLOR_RESET);
+    } else {
+      System.out.println(COLOR_BLUE + "✓ Scalar mode enabled" + COLOR_RESET);
+    }
+    System.out.println();
+
+    String[] fileArgs = fileArgsList.toArray(new String[0]);
     String dataFile = getDataFile(fileArgs);
 
-    // Define ChunkReaders array
-    ChunkReaderConfig[] chunkReaders = new ChunkReaderConfig[] {
-        new ChunkReaderConfig("StandardBuffered", new StandardBufferedReader()),
-        new ChunkReaderConfig("MemoryMapped", new MemoryMappedBufferedReader()),
-        new ChunkReaderConfig("ByteBuffered", new ByteBufferedReader()),
-        new ChunkReaderConfig("Arena", new ArenaReader())
-    };
+    var chunkReaders =
+        new ChunkReaderConfig[] {
+          new ChunkReaderConfig("Arena", new ArenaReader()),
+          new ChunkReaderConfig("StandardBuffered", new StandardBufferedReader()),
+          new ChunkReaderConfig("MemoryMapped", new MemoryMappedBufferedReader()),
+          new ChunkReaderConfig("ByteBuffered", new ByteBufferedReader()),
+        };
 
     // Define LineReaders array
-    LineReaderConfig[] lineReaders = new LineReaderConfig[] {
-        new LineReaderConfig("HashTable", HashTable::new),
-        new LineReaderConfig("LinearProbing", () -> new LinearProbing(TABLE_SIZE))
-    };
+    var lineReaders =
+        new LineReaderConfig[] {
+          new LineReaderConfig("HashTable", HashTable::new),
+          new LineReaderConfig("LinearProbing", () -> new LinearProbing(TABLE_SIZE)),
+          new LineReaderConfig("SIMDHashTable", SIMDHashTable::new),
+          new LineReaderConfig("FlatProbing", () -> new FlatProbing(TABLE_SIZE))
+        };
 
     List<StrategyWrapper> strategies = new ArrayList<>();
     for (ChunkReaderConfig chunkReader : chunkReaders) {
@@ -77,7 +86,7 @@ public class Main {
     List<BenchmarkResult> results = new ArrayList<>();
 
     for (StrategyWrapper s : strategies) {
-      System.out.printf("%s⏱️  Running: %s%s%n", COLOR_YELLOW, s.name, COLOR_RESET);
+      System.out.printf("%s> Running: %s%s%n", COLOR_YELLOW, s.name, COLOR_RESET);
       var result = StrategyRunner.benchmarkStrategy(s.name, s.strategy, dataFile, printResults);
       results.add(result);
       result.printExecutionResult();
@@ -130,12 +139,12 @@ public class Main {
               (p1, p2) -> {
                 try {
                   return Files.getLastModifiedTime(p2).compareTo(Files.getLastModifiedTime(p1));
-                } catch (Exception e) {
+                } catch (IOException e) {
                   return 0;
                 }
               })
           .orElse(defaultPath);
-    } catch (Exception e) {
+    } catch (IOException e) {
       return defaultPath;
     }
   }
