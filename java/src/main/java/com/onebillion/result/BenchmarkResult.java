@@ -87,7 +87,7 @@ public class BenchmarkResult {
             "---",
             "---",
             COLOR_RED,
-            truncateError(r.error.getMessage(), 30),
+            truncateError(r.error.getMessage()),
             COLOR_RESET);
         continue;
       }
@@ -120,9 +120,9 @@ public class BenchmarkResult {
     }
   }
 
-  private static String truncateError(String message, int maxLength) {
-    if (message.length() <= maxLength) return message;
-    return message.substring(0, maxLength - 3) + "...";
+  private static String truncateError(String message) {
+    if (message.length() <= 30) return message;
+    return message.substring(0, 30 - 3) + "...";
   }
 
   private static void printSuccessStats(

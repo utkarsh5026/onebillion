@@ -3,11 +3,11 @@ package com.onebillion.strategies;
 import java.util.Map;
 
 public interface LineReader {
-  void readLine(byte[] lineBytes, int end);
+  void readLine(byte[] lineBytes, int start, int end);
 
   Map<String, StationResult> collect();
 
-  default long getTemp(int semicolonPos, int length, byte[] nameByte, int nameLen) {
+  default long getTemp(int semicolonPos, byte[] nameByte, int nameLen) {
     long temp = 0;
     boolean negative = false;
     for (int i = semicolonPos + 1; i < nameLen; i++) {
@@ -24,5 +24,14 @@ public interface LineReader {
     }
 
     return temp;
+  }
+
+  default int getSemiColonIndex(byte[] lineBytes, int start, int end) {
+    for (int i = start; i < end; i++) {
+      if (lineBytes[i] == ';') {
+        return i;
+      }
+    }
+    return -1;
   }
 }

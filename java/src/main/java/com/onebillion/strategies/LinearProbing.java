@@ -1,11 +1,6 @@
 package com.onebillion.strategies;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
-import java.util.stream.Collectors;
 import org.jetbrains.annotations.NotNull;
 
 public class LinearProbing implements LineReader {
@@ -26,22 +21,6 @@ public class LinearProbing implements LineReader {
       if (data[offset + i] != array[i]) return false;
     }
     return true;
-  }
-
-  public void parseAndProbe(byte[] nameByte, int nameLen) {
-    int semicolonPos = -1;
-    for (int i = 0; i < nameLen; i++) {
-      if (nameByte[i] == ';') {
-        semicolonPos = i;
-        break;
-      }
-    }
-
-    if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
-    int hash = hashFnvDirect(nameByte, semicolonPos);
-
-    long temp = getTemp(semicolonPos, nameLen, nameByte, nameLen);
-    probe(nameByte, 0, semicolonPos, hash, temp);
   }
 
   public void probe(byte[] data, int nameOffset, int nameLen, int hash, long temp) {
@@ -68,62 +47,20 @@ public class LinearProbing implements LineReader {
     this.occupied++;
   }
 
-  private int hashFnvDirect(byte[] nameData, int length) {
-    int hash = 0x811c9dc5;
-    for (int i = 0; i < length; i++) {
-      byte b = nameData[i];
-      hash ^= (b & 0xff);
-      hash *= 0x01000193;
-    }
-    return hash;
-  }
-
   @Override
   public Map<String, StationResult> collect() {
-    return Arrays.stream(table)
-        .filter(Objects::nonNull)
-        .collect(
-            Collectors.toMap(
-                item -> new String(item.name, StandardCharsets.UTF_8),
-                item -> {
-                  var result = new StationResult(new String(item.name, StandardCharsets.UTF_8));
-                  result.sum = item.sum;
-                  result.count = item.count;
-                  result.max = item.maximum;
-                  result.min = item.minimum;
-                  return result;
-                },
-                (a, b) -> a,
-                () -> new HashMap<>(occupied)));
+    return StationTableItem.toResultMap(this.table, this.occupied);
   }
 
   @Override
-  public void readLine(byte[] lineBytes, int end) {
-    parseAndProbe(lineBytes, end);
-  }
+  public void readLine(byte[] lineBytes, int start, int end) {
+    int semicolonPos = getSemiColonIndex(lineBytes, start, end);
+    if (semicolonPos == -1) throw new IllegalArgumentException("Invalid input: no semicolon found");
 
-  static class StationTableItem {
-    byte[] name;
-    int hash;
-    long sum;
-    long count;
-    long maximum;
-    long minimum;
+    int nameLen = semicolonPos - start;
+    int hash = HashUtils.hashFnvDirect(lineBytes, start, nameLen);
 
-    StationTableItem(byte[] name, long val, int hash) {
-      this.name = name;
-      this.sum = val;
-      this.count = 1;
-      this.maximum = val;
-      this.minimum = val;
-      this.hash = hash;
-    }
-
-    void update(long temp) {
-      this.sum += temp;
-      this.count++;
-      if (temp > this.maximum) this.maximum = temp;
-      if (temp < this.minimum) this.minimum = temp;
-    }
+    long temp = getTemp(semicolonPos, lineBytes, end);
+    probe(lineBytes, start, nameLen, hash, temp);
   }
 }

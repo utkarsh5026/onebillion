@@ -13,11 +13,12 @@ public class HashTable implements LineReader {
   }
 
   @Override
-  public void readLine(byte[] lineBytes, int end) {
-    for (int i = 0; i < end; i++) {
+  public void readLine(byte[] lineBytes, int start, int end) {
+    for (int i = start; i < end; i++) {
       if (lineBytes[i] == ';') {
-        var stationName = new String(lineBytes, 0, i, StandardCharsets.UTF_8);
-        long measurement = getTemp(i, end, lineBytes, end);
+        int nameLen = i - start;
+        var stationName = new String(lineBytes, start, nameLen, StandardCharsets.UTF_8);
+        long measurement = getTemp(i, lineBytes, end);
         StationResult result =
             table.computeIfAbsent(stationName, _ -> new StationResult(stationName));
         result.add(measurement);

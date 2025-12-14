@@ -60,8 +60,8 @@ def load_and_prepare_stations() -> tuple[np.ndarray, np.ndarray, np.ndarray, int
 
     mean_temps = np.array([s["mean_temp"] for s in data])
 
-    min_temp = -2000
-    max_temp = 2000
+    min_temp = -990
+    max_temp = 990
 
     lookup = []
     for temp in range(min_temp, max_temp + 1):
