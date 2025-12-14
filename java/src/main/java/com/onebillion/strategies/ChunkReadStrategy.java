@@ -4,6 +4,7 @@ import com.onebillion.result.Color;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.foreign.Arena;
+import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
@@ -39,11 +40,6 @@ public class ChunkReadStrategy {
 
   public ChunkReadStrategy(String filePath) {
     this.filepath = filePath;
-  }
-
-  // No-arg constructor for backward compatibility with existing strategies
-  protected ChunkReadStrategy() {
-    this.filepath = null;
   }
 
   public List<StationResult> runPlan(
@@ -85,13 +81,22 @@ public class ChunkReadStrategy {
         long start = lastEnd;
         long end = Math.min(start + chunkSize, fileSize);
 
-        while (end < fileSize && raf.readByte() != '\n') {
-          raf.seek(end + 1);
+        // Find the next newline after the calculated end position
+        while (end < fileSize) {
+          raf.seek(end);
+          if (raf.readByte() == '\n') {
+            break;
+          }
           end++;
         }
 
-        lastEnd = end++; // Move past the newline for the next chunk's start
-        chunks.add(new Chunk(start, Math.min(fileSize, end), i == 0, i == PROCESSORS - 1, path));
+        // Move past the newline for the next chunk's start
+        if (end < fileSize) {
+          end++; // Skip the newline character
+        }
+
+        lastEnd = end;
+        chunks.add(new Chunk(i, start, end, i == 0, i == PROCESSORS - 1, path));
       }
     }
     return chunks;
@@ -153,6 +158,7 @@ public class ChunkReadStrategy {
         buffer.get(batch, 0, toRead);
         lineBuf.processBuffer(batch, toRead);
       }
+      lineBuf.flush();
       return new ChunkResult(reader.collect(), lineBuf.getFilled());
     }
   }
@@ -175,6 +181,7 @@ public class ChunkReadStrategy {
           lineBuff.processBuffer(buffer, bytesRead);
           totalRead += bytesRead;
         }
+        lineBuff.flush();
         return new ChunkResult(reader.collect(), lineBuff.getFilled());
       }
     }
@@ -220,18 +227,18 @@ public class ChunkReadStrategy {
 
         while (pos < size) {
           int toRead = (int) Math.min(batch.length, size - pos);
-          for (int i = 0; i < toRead; i++) {
-            batch[i] = segment.get(ValueLayout.JAVA_BYTE, pos + i);
-          }
+          // Bulk copy instead of byte-by-byte for much better performance
+          MemorySegment.copy(segment, ValueLayout.JAVA_BYTE, pos, batch, 0, toRead);
           lineBuf.processBuffer(batch, toRead);
           pos += toRead;
         }
+        lineBuf.flush(); // Flush any remaining spillover
         return new ChunkResult(reader.collect(), lineBuf.getFilled());
       }
     }
   }
 
-  public record Chunk(long start, long end, boolean isStart, boolean isEnd, Path path) {}
+  public record Chunk(int index, long start, long end, boolean isStart, boolean isEnd, Path path) {}
 
   public record ChunkResult(Map<String, StationResult> results, int rowCount) {}
 }
