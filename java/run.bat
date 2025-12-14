@@ -66,7 +66,19 @@ if not exist "target\classes" (
     echo Building project first...
     echo ========================================================================
     echo.
-    call mvn clean compile
+
+    REM Create target directory structure
+    if not exist "target\classes" mkdir target\classes
+
+    REM Compile Java sources with javac
+    echo Compiling Java sources...
+    javac --add-modules jdk.incubator.vector ^
+          -d target\classes ^
+          -sourcepath src\main\java ^
+          src\main\java\com\onebillion\*.java ^
+          src\main\java\com\onebillion\strategies\*.java ^
+          src\main\java\com\onebillion\result\*.java
+
     if errorlevel 1 (
         echo.
         echo Build failed!
