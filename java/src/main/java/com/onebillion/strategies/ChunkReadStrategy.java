@@ -1,6 +1,5 @@
 package com.onebillion.strategies;
 
-import com.onebillion.result.Color;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.foreign.Arena;
@@ -19,14 +18,21 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+
 import org.jetbrains.annotations.NotNull;
 
+import com.onebillion.result.Color;
+
 /**
- * Strategy to produce byte-range chunks for a file so work can be distributed across available
+ * Strategy to produce byte-range chunks for a file so work can be distributed
+ * across available
  * PROCESSORS.
  *
- * <p>Chunks are non-overlapping and together cover the entire file. The file is divided into {@code
- * PROCESSORS} parts; the last chunk absorbs any remainder when the file size is not evenly
+ * <p>
+ * Chunks are non-overlapping and together cover the entire file. The file is
+ * divided into {@code
+ * PROCESSORS} parts; the last chunk absorbs any remainder when the file size is
+ * not evenly
  * divisible.
  */
 public class ChunkReadStrategy {
@@ -46,23 +52,23 @@ public class ChunkReadStrategy {
       ChunkReader chunkReader, Supplier<LineReader> lineReaderSupplier)
       throws IOException, ExecutionException, InterruptedException {
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-      var futures =
-          produceChunks(filepath).stream()
-              .map(
-                  chunk ->
-                      executor.submit(
-                          () ->
-                              chunkReader.processChunk(
-                                  chunk.path(), chunk, lineReaderSupplier.get())))
-              .toList();
+      var futures = produceChunks(filepath).stream()
+          .map(
+              chunk -> executor.submit(
+                  () -> chunkReader.processChunk(
+                      chunk.path(), chunk, lineReaderSupplier.get())))
+          .toList();
       return createResults(futures);
     }
   }
 
   /**
-   * Produce a list of {@link Chunk} objects that partition the file at the given filepath.
+   * Produce a list of {@link Chunk} objects that partition the file at the given
+   * filepath.
    *
-   * <p>Each chunk contains an inclusive start byte and an exclusive end byte, along with flags
+   * <p>
+   * Each chunk contains an inclusive start byte and an exclusive end byte, along
+   * with flags
    * indicating whether it is the first or last chunk.
    *
    * @param filepath path to the file to split into chunks
@@ -103,17 +109,16 @@ public class ChunkReadStrategy {
   }
 
   protected List<StationResult> createResults(@NotNull List<Future<ChunkResult>> futures) {
-    var results =
-        futures.stream()
-            .map(
-                f -> {
-                  try {
-                    return f.get();
-                  } catch (InterruptedException | ExecutionException e) {
-                    throw new RuntimeException("Error in thread execution: " + e.getMessage(), e);
-                  }
-                })
-            .toList();
+    var results = futures.stream()
+        .map(
+            f -> {
+              try {
+                return f.get();
+              } catch (InterruptedException | ExecutionException e) {
+                throw new RuntimeException("Error in thread execution: " + e.getMessage(), e);
+              }
+            })
+        .toList();
 
     int totalRowsRead = results.stream().mapToInt(ChunkResult::rowCount).sum();
     System.out.println(
@@ -176,7 +181,8 @@ public class ChunkReadStrategy {
         while (totalRead < size) {
           int toRead = (int) Math.min(buffer.length, size - totalRead);
           int bytesRead = raf.read(buffer, 0, toRead);
-          if (bytesRead == -1) break;
+          if (bytesRead == -1)
+            break;
 
           lineBuff.processBuffer(buffer, bytesRead);
           totalRead += bytesRead;
@@ -199,17 +205,39 @@ public class ChunkReadStrategy {
     }
   }
 
-  public static class ByteBufferedReader extends NioBufferReader implements ChunkReader {
+  public static class ByteBufferedReader implements ChunkReader {
 
     @Override
     public ChunkResult processChunk(Path path, Chunk chunk, LineReader reader) throws IOException {
       try (var raf = new RandomAccessFile(path.toFile(), "r");
           var channel = raf.getChannel()) {
-        int size = (int) (chunk.end() - chunk.start());
-        var buffer = java.nio.ByteBuffer.allocateDirect(size);
-        channel.read(buffer, chunk.start());
-        buffer.flip();
-        return processChunk(chunk, reader, buffer);
+        long chunkSize = chunk.end() - chunk.start();
+        var buffer = java.nio.ByteBuffer.allocateDirect(BATCH_SIZE);
+        var lineBuf = new LineBuffer(reader);
+        var batch = new byte[BATCH_SIZE];
+        long position = chunk.start();
+        long remaining = chunkSize;
+
+        while (remaining > 0) {
+          buffer.clear();
+          int toRead = (int) Math.min(BATCH_SIZE, remaining);
+          buffer.limit(toRead);
+          int bytesRead = channel.read(buffer, position);
+          if (bytesRead == -1)
+            break;
+
+          buffer.flip();
+          position += bytesRead;
+          remaining -= bytesRead;
+
+          while (buffer.hasRemaining()) {
+            int batchSize = Math.min(buffer.remaining(), batch.length);
+            buffer.get(batch, 0, batchSize);
+            lineBuf.processBuffer(batch, batchSize);
+          }
+        }
+        lineBuf.flush();
+        return new ChunkResult(reader.collect(), lineBuf.getFilled());
       }
     }
   }
@@ -238,7 +266,9 @@ public class ChunkReadStrategy {
     }
   }
 
-  public record Chunk(int index, long start, long end, boolean isStart, boolean isEnd, Path path) {}
+  public record Chunk(int index, long start, long end, boolean isStart, boolean isEnd, Path path) {
+  }
 
-  public record ChunkResult(Map<String, StationResult> results, int rowCount) {}
+  public record ChunkResult(Map<String, StationResult> results, int rowCount) {
+  }
 }
