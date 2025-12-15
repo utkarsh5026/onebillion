@@ -1,16 +1,14 @@
 package com.onebillion.result;
 
+import com.onebillion.strategies.StationResult;
 import java.io.File;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-
-import com.onebillion.strategies.StationResult;
 
 public class ResultChecker {
 
@@ -37,8 +35,9 @@ public class ResultChecker {
       return validation.addError("Error reading expected results file: " + e.getMessage());
     }
 
-    Map<String, StationResult> actualMap = actualResults.stream()
-        .collect(Collectors.toMap(StationResult::getStationName, Function.identity()));
+    Map<String, StationResult> actualMap =
+        actualResults.stream()
+            .collect(Collectors.toMap(StationResult::getStationName, Function.identity()));
 
     validation.totalStations = expectedResults.size();
     validation.isValid = true;
@@ -78,7 +77,8 @@ public class ResultChecker {
       ValidationResult validation) {
     var actualMin = actual.getMin() / 10.0;
     var actualMax = actual.getMax() / 10.0;
-    var actualAvg = actual.getCount() > 0 ? (double) actual.getSum() / (double) actual.getCount() / 10.0 : 0;
+    var actualAvg =
+        actual.getCount() > 0 ? (double) actual.getSum() / (double) actual.getCount() / 10.0 : 0;
 
     boolean minMatches = Math.abs(actualMin - expected.min()) <= TOLERANCE;
     boolean maxMatches = Math.abs(actualMax - expected.max()) <= TOLERANCE;
@@ -91,13 +91,11 @@ public class ResultChecker {
         errs.append(String.format("min(expected=%.1f, actual=%.1f)", expected.min(), actualMin));
       }
       if (!maxMatches) {
-        if (!minMatches)
-          errs.append(", ");
+        if (!minMatches) errs.append(", ");
         errs.append(String.format("max(expected=%.1f, actual=%.1f)", expected.max(), actualMax));
       }
       if (!avgMatches) {
-        if (!minMatches || !maxMatches)
-          errs.append(", ");
+        if (!minMatches || !maxMatches) errs.append(", ");
         errs.append(String.format("avg(expected=%.1f, actual=%.1f)", expected.avg(), actualAvg));
       }
 
