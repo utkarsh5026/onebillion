@@ -33,11 +33,8 @@ public class SegmentProbing {
   }
 
   private boolean isEqual(MemorySegment segment, long offset, Entry e) {
-    // Fast memory comparison using mismatch (vectorized by JVM)
-    // Compare the segment at offset with the stored entry's name
-    MemorySegment name1 = segment.asSlice(offset, e.nameLen);
-    MemorySegment name2 = segment.asSlice(e.nameOffset, e.nameLen);
-    return name1.mismatch(name2) == -1;
+    return MemorySegment.mismatch(segment, offset, offset + e.nameLen,
+                                  segment, e.nameOffset, e.nameOffset + e.nameLen) == -1;
   }
 
   public Map<String, StationResult> getResults() {
